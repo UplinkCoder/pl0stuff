@@ -31,21 +31,21 @@ extern (C) Token[] lex(in string source) pure {
 		return ((c >= 'a' && c <= 'z'));
 	}
 
+	bool isNumber(char c) pure {
+		return ((c >= '0' && c <= '9'));
+	}
+
 	void lexIdentifier() {
 		char[] __a;
-		char __c;
-
-		while(isIdentifier(__c = peek(cast(uint)__a.length))) {
+		char __c  = peek(0);
+		do {
 			__a ~= __c;
-		}
+			__c = peek(cast(uint)__a.length);
+		} while(isIdentifier(__c) || isNumber(__c));
 
 		putToken(TokenType.TT_Identifier, __a, cast(uint) __a.length);
 
 		return;	
-	}
-
-	bool isNumber(char c) pure {
-		return ((c >= '0' && c <= '9'));
 	}
 
 	void lexNumber() {
