@@ -1,0 +1,91 @@
+PLNode {
+	Identifier @internal {
+		[a-z][] identifier
+	}
+
+	Number @internal {
+		[0-9][] number
+	}
+
+	Programm @parent {
+		Block block, "."
+	}
+	
+	Block @internal {
+		? "CONST" :  (ConstDecl[] constants : ",", ";"),
+		? "VAR" : (VarDecl[] variables : ",", ";"),
+		? "PROCEDURE" : (ProDecl[] procedures : "PROCEDURE", ";"),
+		Statement statement
+	}
+
+	ConstDecl @internal {
+		Identifier name, "=", Number number
+	}
+
+	VarDecl @internal {
+		Identifier name
+	}
+
+	ProDecl @internal {
+		Identifier name, ";", Block block, ";"
+	}
+	
+	Statement @internal {
+		NamedExpression {
+			Identifier name, ":=", Expression expr
+		}
+		BeginEndStatement {
+			"BEGIN", Statement[] statements : ";", "END"	
+		}
+		IfStatement {
+			"IF", Condition cond, "THEN", Statement stmt
+		}
+		WhileStatement {
+			"WHILE", Condition cond, "DO", Statement stmt
+		}
+		CallStatement {
+			"CALL", Identifier name
+		}
+	}
+
+	Condition @internal {
+		OddCondition {"ODD", Expression expr}
+		RelCondition {Expression lhs, RelOp op, Expression rhs}
+	}
+
+	RelOp @internal {
+		Equals {"="}
+		Greater {">"}
+		Less {"<"}
+		GreaterEq {">="}
+		LessEq {"<="}
+		Hash {"#"} 
+	}
+
+	AddOp @internal {
+		Add {"+"}
+		Sub {"-"}
+	}
+
+	MulOp @internal {
+		Mul {"*"}
+		Div {"/"}
+	}
+
+	Expression @internal {
+		AddExprssion { 
+			Expression lhs, AddOp op, Expression rhs
+		}
+		MulExpression {
+			Expression lhs, MulOp op, Expression rhs
+		}
+		
+		ParenExpression @internal {
+			"(", Expression expr, ")"
+		}
+		
+		PrimaryExpression {
+			Number number / Identifier identifier / ParenExpression paren
+		}
+	}
+}

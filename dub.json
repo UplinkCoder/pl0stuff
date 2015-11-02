@@ -1,0 +1,8 @@
+{
+	"name": "pl0stuff",
+	"description": "PL0 SourceCode analyser",
+	"copyright": "Copyright © 2015, Stefan Koch",
+	"authors": ["Stefan Koch"],
+	"dependencies": {
+	}
+}
