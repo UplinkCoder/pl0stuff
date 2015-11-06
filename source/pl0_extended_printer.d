@@ -11,7 +11,7 @@ const(char)[] indentBy(const char[] str, const int indentLevel) pure {
 }
 
 //printer_boilerplate
-string print(const Programm root) pure {
+string print(const PLNode root) pure {
 	
 	struct Printer {
 		Appender!(char[]) sink;
@@ -235,7 +235,7 @@ string print(const Programm root) pure {
 			newlineAfterStatement = false;
 			foreach(_e;g.statements[0..$-1]) {
 				print(_e);
-				sink.put(";\n");
+				sink.put(";");
 			}
 
 			if (g.statements.length >= 1) {
@@ -390,7 +390,7 @@ string print(const Programm root) pure {
 
 	}
 	auto ptr = Printer();
-	ptr.print(cast(Programm)root);
+	ptr.print(cast(PLNode)root);
 	return cast(string)ptr.sink.data;
 }
 
