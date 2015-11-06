@@ -22,23 +22,44 @@ import std.file;
 import std.algorithm;
 import std.array;
 import pl0_testsource;
-import pl0_callInliner;
+import optimizer;
+import sdc.terminal;
+
+static const static_parsed = test0.lex.parse;
+static const static_patsed_1 = test1.lex.parse;
+
+version(Extended) {
+	static const extended_test_0 = test0_extended.lex.parse;
+	static const extended_test_1 = test1_extended.lex.parse;
+	//	static const extended_test_2 = test2_extended.lex.parse;
+}
+pragma(msg, static_parsed);
+version(Extended) {
+	pragma(msg, extended_test_1);
+}
+
+
 
 void main(string[] args) {
-	static const static_parsed = test0.lex.parse;
-	static const static_patsed_1 = test1.lex.parse;
+	import std.getopt;
 
-	version(Extended) {
-		static const extended_test_0 = test0_extended.lex.parse;
-		static const extended_test_1 = test1_extended.lex.parse;
-	//	static const extended_test_2 = test2_extended.lex.parse;
-	}
+
+	bool optimize;
+	bool _debug;
+	string outputFile;
+
+	getopt(
+		args, std.getopt.config.caseSensitive,
+		//Flags first
+		"O|optimize", &optimize,
+		"debug", &_debug,
+
+		//Arguments second
+
+		"o|output-file", &outputFile,
+
+	);
 		
-	pragma(msg, static_parsed);
-	version(Extended) {
-		pragma(msg, extended_test_1);
-	}
-
 		if (args.length == 2) {
 		auto source = readText(args[1]);
 			auto lexed = lex(source);
@@ -56,43 +77,66 @@ void main(string[] args) {
 			}
 		}
 		auto ci = CallInliner(&analyzer);
-		writeln("Before Inlining", analyzer.programm.print);
-		foreach (be;analyzer.allNodes.filter!(n => cast(BeginEndStatement)n.node)) {
-			reduceBeginEnd(be);
-		}
-		foreach (cs;analyzer.allNodes.filter!(n => cast(CallStatement)n.node)) {
-			ci.inlineCall(cs);
-		}
-		writeln("After Inlining", analyzer.programm.print);
+		if (optimize) {
+			if (_debug) writeln("Before Inlining", analyzer.programm.print);
+	
+			foreach (cs;analyzer.allNodes.filter!(n => cast(CallStatement)n.node)) {
+				ci.inlineCall(cs);
+			}
+			if (_debug) writeln("After Inlining", analyzer.programm.print);
 
+			foreach (be;analyzer.allNodes.filter!(n => cast(BeginEndStatement)n.node &&
+				(cast(BeginEndStatement*)&(n.node)).statements.length == 1)) {
+			reduceBeginEnd(&analyzer, be);
+			}
+			if (_debug) writeln("After BeginEndReduce", analyzer.programm.print);
+
+			rewriteConst(&analyzer);
+			if (_debug) writeln("After ConstRewrite", analyzer.programm.print);
+
+			removeUnreferancedSymbols(&analyzer);
+			if (_debug) writeln("After Removeing unreferenced Symbols", analyzer.programm.print);
+		}
 		foreach(node;analyzer.allNodes
 			.filter!(n => cast(PrimaryExpression)n.node !is null)
 			.filter!(n => (cast(PrimaryExpression*)&n.node).identifier !is null)) {
 			auto pe = (cast(PrimaryExpression*)&node.node);
-			if (pe.identifier.identifier !in analyzer.stable.symbolsByName) {
-			//	auto expr = Analyzer.getAllNodes(pe
-				analyzer.errors ~= analyzer.Error("Undeclared Symbol Refernced", pe.loc);
-				writeln(analyzer.errors[$-1].toString(source));
-				version (Location) {
-				//	writeln(" in Line ", pe.loc.line,"!","\n",source[pe.loc.absPos .. pe.loc.absPos + pe.loc.length +1]); 
-				} else {
-					writeln();
-				}
+			if (analyzer.getNearestSymbol(analyzer.getParentBlock(node), pe.identifier) is null) {
+				analyzer.errors ~= Analyzer._Error("Undeclared Symbol: " ~ cast(string)pe.identifier.identifier, pe.loc);
 			}
 		}
 		foreach(node;analyzer.allNodes
 			.filter!(n => cast(AssignmentStatement)n.node !is null)) {
-			if (auto e = analyzer.isInvaildAssignment(node)) {
-				writeln(e.toString(source));
-			}
+			analyzer.isInvaildAssignment(node);
 		}
 
-			writeln("Programm has ", analyzer.countBlocks(), " blocks and ", analyzer.countBeginEndStatements, " BEGIN .. END Statements.");
+
+		void OutputErrors() {
+			FileSource fs = new FileSource();
+			fs.content = source;
+			fs.filename = args[1];
+			foreach(e;analyzer.errors) {
+				Location loc;
+				loc.source = fs; 
+				loc.line = e.loc.line;
+				loc.index = e.loc.absPos;
+				loc.length = e.loc.length;
+				outputCaretDiagnostics(loc, e.reason);
+			}
+
+		}
+
+
+//			writeln("Programm has ", analyzer.countBlocks(), " blocks and ", analyzer.countBeginEndStatements, " BEGIN .. END Statements.");
 		//writeln(analyzer.genDot);
-		writeln("AllVariables : ", sort(analyzer.getAllNodes.map!(i => (cast(VarDecl)i.node)).filter!(n => n !is null).map!(i => i.name.identifier).array).uniq);
-		writeln("AllConstants : ", sort(analyzer.getAllNodes.map!(i => (cast(ConstDecl)i.node)).filter!(n => n !is null).map!(i => i.name.identifier).array).uniq);
-		writeln("AllProcedures : ", sort(analyzer.getAllNodes.map!(i => (cast(ProDecl)i.node)).filter!(n => n !is null).map!(i => i.name.identifier).array));
-		writeln(analyzer.programm.block.procedures.length);
+//		writeln("AllVariables : ", sort(analyzer.getAllNodes.map!(i => (cast(VarDecl)i.node)).filter!(n => n !is null).map!(i => i.name.identifier).array).uniq);
+//		writeln("AllConstants : ", sort(analyzer.getAllNodes.map!(i => (cast(ConstDecl)i.node)).filter!(n => n !is null).map!(i => i.name.identifier).array).uniq);
+//		writeln("AllProcedures : ", sort(analyzer.getAllNodes.map!(i => (cast(ProDecl)i.node)).filter!(n => n !is null).map!(i => i.name.identifier).array));
+		OutputErrors();
+		if (outputFile) {
+			File f = File(outputFile, "wb");
+			f.writeln(analyzer.programm.print());
+		}
 	} else {
 			writeln ("invoke like : ", args[0], " file.pl0 \n");
 		}

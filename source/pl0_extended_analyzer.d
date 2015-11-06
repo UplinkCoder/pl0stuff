@@ -14,14 +14,14 @@ struct Analyzer {
 			this.parent = parent;
 		}
 
-		static NodeWithParentBlock opCall(PLNode node, NodeWithParentBlock *parent) pure {
+		static NodeWithParentBlock opCall(ref PLNode node, NodeWithParentBlock *parent) pure {
 			return NodeWithParentBlock(node, parent);
 		}
 	}
 
-	static struct Error {
+	static struct _Error {
 		string reason;
-		Location loc;
+		MyLocation loc;
 
 		string toString(string source)  shared {
 			import std.format;
@@ -38,21 +38,22 @@ struct Analyzer {
 	Programm programm;
 	NodeWithParentBlock*[] allNodes;
 	Block[Block] parentMap;
-	shared Error[] errors;
+	shared _Error[] errors;
 
 
 
 	struct SymbolTable {
-		static running_id = 1;
+		static running_id = 0;
 		static struct Symbol {
 			uint id;
+			Block definedIn;
+			bool isReferenced;
 			union {
 				Declaration d;
 				VarDecl v;
 				ConstDecl c;
 				ProDecl p;
 			}
-			Block definedIn;
 			enum SymbolType {
 				_VarDecl,
 				_ConstDecl,
@@ -97,6 +98,7 @@ struct Analyzer {
 			
 			symbolsByName[s.getSymbolName()] ~= s;
 			symbolsByBlock[s.definedIn] ~= s;
+			symbolById[s.id] = s;
 			
 			return;
 		}
@@ -107,12 +109,14 @@ struct Analyzer {
 
 		Symbol[][string] symbolsByName;
 		Symbol[][Block] symbolsByBlock;
+		Symbol[uint] symbolById;
 	}
 	
 	SymbolTable stable; 
 	alias Symbol = SymbolTable.Symbol;
 
 	void fillSymbolTable() {
+		stable = typeof(stable).init;
 		foreach(b;getAllNodes()
 			.map!(n => cast(Block)n.node)
 			.filter!(b => b !is null && (!!b.variables.length || !!b.constants.length || !!b.procedures.length))) {
@@ -134,13 +138,12 @@ struct Analyzer {
 
 	void fillParentMap() {
 		void fillParentMap(Block child, Block parent) {
-			
 			parentMap[child] = parent;
 			foreach(p; child.procedures) {
 				fillParentMap(p.block, child);
 			}
 		}
-		
+		parentMap = parentMap.init;
 		fillParentMap(programm.block, null);
 	}
 	
@@ -155,13 +158,47 @@ struct Analyzer {
 		}
 	}
 
+	void removeSymbol(Symbol s) {
+		Block b = s.definedIn;
+		import std.array;
+			final switch(s.type) with (Symbol.SymbolType) {
+				case _VarDecl :
+				auto findSplitResult = findSplit(b.variables, [s.v]);
+				b.variables = findSplitResult[0] ~ findSplitResult[2];
+				break;
+				case _ConstDecl :
+				auto findSplitResult = findSplit(b.constants, [s.c]);
+				b.constants = findSplitResult[0] ~ findSplitResult[2];
+				break;
+				case _ProDecl :
+					auto findSplitResult = findSplit(b.procedures, [s.p]);
+				debug {import std.stdio;writeln(findSplitResult);}
+				b.procedures = findSplitResult[0] ~ findSplitResult[2];
+				break;
+		}
+	}
+
+	Block getParentBlock(nwp* n) {
+		nwp *parentBlock = (n);
+	findParent :
+		while(!cast(Block) parentBlock.node) {
+			parentBlock = parentBlock.parent;
+		}
+		return cast (Block) parentBlock.node;
+	}
+
 	Symbol* getNearestSymbol(Block b, Identifier i) {
 		auto syms = stable.symbolsByBlock.get(b, null);
 		if (syms !is null) {
 			import std.algorithm;
 			auto s = find!(s => s.getSymbolName == i.identifier)(syms);
-			if (s.length) {
+			if (s.length >= 1) {
+				s[0].isReferenced = true;
 				return &s[0];
+			} else {
+				//assert(0, "Symbol '" ~ i.identifier ~ "' could not be resolved unamigouisly");
+				import std.stdio;
+				writeln(s);
 			}
 		}
 
@@ -172,26 +209,20 @@ struct Analyzer {
 		}
 	}
 
-	shared(Error)* isInvaildAssignment(nwp* n) in {
+	shared(_Error)* isInvaildAssignment(nwp* n) in {
 		assert(!!cast(AssignmentStatement)n.node, "only for AssignmentStaement nwps");
 	} body {
 		auto as = cast(AssignmentStatement) n.node;
-		nwp *parent = (n);
-	findParent :
-		while(!cast(Block)(*parent).node) {
-			parent = (*parent).parent;
-		}
-
-		auto nearestSymbol = getNearestSymbol(cast(Block)(*parent).node, as.name);
+		auto nearestSymbol = getNearestSymbol(getParentBlock(n), as.name);
 
 		if (nearestSymbol is null) {
-			errors ~= Error("Assignment to undefined Symbol", as.loc);
+			errors ~= _Error("Assignment to undefined Symbol", as.loc);
 			return &errors[$-1];
 		} else if (nearestSymbol.type == Symbol.SymbolType._ConstDecl) {
-			errors ~= Error("Assignment to Constant", as.loc);
+			errors ~= _Error("Assignment to Constant", as.loc);
 			return &errors[$-1];
 		} else if (nearestSymbol.type == Symbol.SymbolType._ProDecl) {
-			errors ~= Error("Assignment to procedure", as.loc);
+			errors ~= _Error("Assignment to procedure", as.loc);
 			return &errors[$-1];
 		}
 
@@ -265,7 +296,7 @@ struct Analyzer {
 	
 	uint countBeginEndStatements() {
 		uint result;
-		foreach(beginWhileNode;allNodes.map!(n => cast(BeginEndStatement)n.node).filter!(bes => bes !is null)) {
+		foreach(beginWhileNode;allNodes.map!(n => cast(BeginEndStatement)(*n).node).filter!(bes => bes !is null)) {
 			++result;
 		}
 		return result;
@@ -280,7 +311,7 @@ struct Analyzer {
 		}
 		return allNodes;
 		} else {
-			return getAllNodes(programm.block);
+			return  getAllNodes(programm.block, new nwp(programm, null));
 		}
 	}
 	static pure {
@@ -316,46 +347,57 @@ struct Analyzer {
 		
 		nwp*[] getAllNodes(Statement s, nwp* p) {
 			if (auto a = cast(AssignmentStatement)s) {
-				return ([new nwp(a, p), new nwp(new PrimaryExpression(false, null, a.name, null), p)] ~ getAllNodes(a.expr, p));
+				auto ap = new nwp(a, p);
+				return ([ap, new nwp(new PrimaryExpression(false, null, a.name, null), ap)] ~ getAllNodes(a.expr, ap));
 			} else if (auto c = cast(CallStatement)s) {
 				return [new nwp(c, p)];
 			} else if (auto b = cast(BeginEndStatement)s) {
-				auto result = [new nwp(b, p)];
+				auto bp = new nwp(b, p);
+				auto result = [bp];
 				foreach(stmt;b.statements) {
-					result ~= getAllNodes(stmt, new nwp(b, p));
+					result ~= getAllNodes(stmt, bp);
 				}
 				return result;
 			} else if (auto i = cast(IfStatement)s) {
-				return new nwp(i, p) ~ getAllNodes(i.cond, new nwp(i, p)) ~ getAllNodes(i.stmt, new nwp(i, p));
+				auto ip = new nwp(i, p);
+				return  ip ~ getAllNodes(i.cond, ip) ~ getAllNodes(i.stmt, ip);
 			} else if (auto w = cast(WhileStatement)s) {
-				return new nwp(w, p) ~ getAllNodes(w.cond, new nwp(w, p)) ~ getAllNodes(w.stmt, new nwp(w, p));
+				auto wp = new nwp(w, p);
+				return wp ~ getAllNodes(w.cond, wp) ~ getAllNodes(w.stmt, wp);
 			} else if (auto o = cast(OutputStatement)s) {
-				return new nwp(o, p) ~ getAllNodes(o.expr, new nwp(o, p));
+				auto op = new nwp(o, p);
+				return op ~ getAllNodes(o.expr, op);
 			} assert(0, "We should never get here!");
 		}
 		
 		nwp*[] getAllNodes(Condition c, nwp* p) {
 			if (auto o = cast (OddCondition)c) {
-				return new nwp(o, p) ~ getAllNodes(o.expr, new nwp(o, p));
+				auto op = new nwp(o, p);
+				return  op ~ getAllNodes(o.expr, op);
 			} else if (auto r = cast(RelCondition)c) {
-				return new nwp(r, p) ~ getAllNodes(r.lhs, new nwp(r, p)) ~ getAllNodes(r.rhs, new nwp(r, p));
+				auto rp = new nwp(r, p);
+				return rp ~ getAllNodes(r.lhs, rp) ~ getAllNodes(r.rhs, rp);
 			} else assert(0, "We should never get here!");
 		}
 		
 		nwp*[] getAllNodes(Expression e, nwp* p) {
 			if(auto a = cast(AddExprssion) e) {
-				return new nwp(a, p) ~ getAllNodes(a.lhs, new nwp(a, p)) ~ getAllNodes(a.rhs, new nwp(a, p));
+				auto ap = new nwp(a, p);
+				return ap ~ getAllNodes(a.lhs, ap) ~ getAllNodes(a.rhs, ap);
 			} else if(auto m = cast(MulExpression) e) {
-				return new nwp(m, p) ~ getAllNodes(m.lhs, new nwp(m, p)) ~ getAllNodes(m.rhs, new nwp(m, p));
+				auto mp = new nwp(m, p);
+				return  mp ~ getAllNodes(m.lhs, mp) ~ getAllNodes(m.rhs, mp);
 			} else if(auto pe = cast(ParenExpression) e) {
-				return new nwp(pe, p) ~ getAllNodes(pe.expr, new nwp(pe, p));
+				auto pp = new nwp(pe, p);
+				return pp ~ getAllNodes(pe.expr, pp);
 			} else if(auto pr = cast(PrimaryExpression) e) {
 				if (pr.identifier) {
 					return [new nwp(pr,p)];
 				} else if (pr.literal) {
 					return [new nwp(pr,p)];
 				} else if (pr.paren) {
-					return new nwp(pr,p) ~ getAllNodes(pr.paren, new nwp(pr, p));
+					auto pp = new nwp(pr,p);
+					return  pp ~ getAllNodes(pr.paren, pp);
 				} else assert(0);
 			} else assert(0, "We should never get here!");
 		}

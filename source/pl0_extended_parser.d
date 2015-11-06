@@ -5,7 +5,7 @@ version = Location;
 
 immutable string header = `
 		version (Location) {
-			Location loc;
+			MyLocation loc;
 			auto firstToken = peekToken(0);
 			loc.line = firstToken.line;
 			loc.col = firstToken.col;

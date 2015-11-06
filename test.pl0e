@@ -1,0 +1,23 @@
+CONST one = 1;
+VAR x, squ;
+PROCEDURE superflous;
+ squ := squ
+;
+
+PROCEDURE square;
+BEGIN
+   squ:= x * x
+END;
+
+BEGIN
+	BEGIN 
+		  x := one
+	END;
+
+   WHILE x <= 10 DO
+   BEGIN
+      CALL square;
+      ! squ;
+      x := x + one
+   END
+END.

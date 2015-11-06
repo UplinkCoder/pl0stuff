@@ -1,7 +1,7 @@
 version = Location;
 
 version (Location) {
-	struct Location {
+	struct MyLocation {
 		uint line;
 		uint col;
 		uint absPos;
@@ -9,7 +9,7 @@ version (Location) {
 	}
 
 	abstract class PLNode {
-		Location loc;
+		MyLocation loc;
 	}
 } else {
 //	abstract class PLNode {}
