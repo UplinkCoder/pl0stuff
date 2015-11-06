@@ -18,20 +18,22 @@ PLNode {
 		Statement statement
 	}
 
-	ConstDecl @internal {
-		Identifier name, "=", Number number
-	}
+	Declaration @internal {
+		ConstDecl @internal {
+			Identifier name, "=", Number number
+		}
 
-	VarDecl @internal {
-		Identifier name
-	}
+		VarDecl @internal {
+			Identifier name
+		}
 
-	ProDecl @internal {
-		Identifier name, ";", Block block, ";"
+		ProDecl @internal {
+			Identifier name, ";", Block block, ";"
+		}
 	}
 	
 	Statement @internal {
-		NamedExpression {
+		AssignmentStatement {
 			Identifier name, ":=", Expression expr
 		}
 		BeginEndStatement {

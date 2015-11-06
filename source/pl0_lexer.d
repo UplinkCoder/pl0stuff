@@ -3,7 +3,7 @@ import std.exception;
 
 extern (C) Token[] lex(in string source) pure {
 	uint col;
-	uint line;
+	uint line = 1;
 	uint pos;
 	Token[] result;
 	

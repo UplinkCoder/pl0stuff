@@ -1,11 +1,22 @@
-import pl0_ast;
-import std.range;
+import pl0_extended_ast;
+import std.array;
+
+const(char)[] indentBy(const char[] str, const int indentLevel) pure {
+	char[] indent;
+	//indent.reserve(5);
+	foreach(t;0..indentLevel) {
+		indent ~= "\t";
+	}
+	return indent ~ str;
+}
+
+//printer_boilerplate
 string print(const Programm root) pure {
 	
 	struct Printer {
-	pure :
 		Appender!(char[]) sink;
-
+		uint iLvl;
+		bool newlineAfterStatement = true;
 		void print(const char c) {
 			sink.put([c]);
 		}
@@ -25,17 +36,15 @@ string print(const Programm root) pure {
 				return print(_g);
 			} else if(auto _g = cast(Condition) _p) {
 				return print(_g);
+			} else if(auto _g = cast(Declaration) _p) {
+				return print(_g);
 			} else if(auto _g = cast(Statement) _p) {
-				return print(_g);
-			} else if(auto _g = cast(ProDecl) _p) {
-				return print(_g);
-			} else if(auto _g = cast(VarDecl) _p) {
-				return print(_g);
-			} else if(auto _g = cast(ConstDecl) _p) {
 				return print(_g);
 			} else if(auto _g = cast(Block) _p) {
 				return print(_g);
 			} else if(auto _g = cast(Programm) _p) {
+				return print(_g);
+			} else if(auto _g = cast(Literal) _p) {
 				return print(_g);
 			} else if(auto _g = cast(Number) _p) {
 				return print(_g);
@@ -44,18 +53,34 @@ string print(const Programm root) pure {
 			} 
 		}
 
-		void print(Statement _p) {
-			if(auto _g = cast(AssignmentStatement) _p) {
+		void print(Declaration _p) {
+			if(auto _g = cast(ConstDecl) _p) {
 				return print(_g);
-			} else if(auto _g = cast(BeginEndStatement) _p) {
+			} else if(auto _g = cast(VarDecl) _p) {
 				return print(_g);
-			} else if(auto _g = cast(IfStatement) _p) {
-				return print(_g);
-			} else if(auto _g = cast(WhileStatement) _p) {
-				return print(_g);
-			} else if(auto _g = cast(CallStatement) _p) {
+			} else if(auto _g = cast(ProDecl) _p) {
 				return print(_g);
 			} 
+		}
+
+		void print(Statement _p) {
+			sink.put("\n");
+			sink.put("".indentBy(iLvl));
+
+			if(auto _g = cast(AssignmentStatement) _p) {
+				print(_g);
+			} else if(auto _g = cast(BeginEndStatement) _p) {
+				print(_g);
+			} else if(auto _g = cast(IfStatement) _p) {
+				print(_g);
+			} else if(auto _g = cast(WhileStatement) _p) {
+				print(_g);
+			} else if(auto _g = cast(CallStatement) _p) {
+				print(_g);
+			} else if(auto _g = cast(OutputStatement) _p) {
+				print(_g);
+			}
+			if (newlineAfterStatement) sink.put("\n");
 		}
 
 		void print(Condition _p) {
@@ -112,51 +137,57 @@ string print(const Programm root) pure {
 
 		void print(Identifier g) {
 			sink.put(g.identifier);
-			sink.put(" ");
 		}
 
 
 		void print(Number g) {
 			sink.put(g.number);
-			sink.put(" ");
+		}
+
+
+		void print(Literal g) {
+			print(g.intp);
+			if (g.floatp) {
+				sink.put(".");
+				print(g.floatp);
+			}
 		}
 
 
 		void print(Programm g) {
+			sink.put("\n");
 			print(g.block);
-			sink.put(" ");
+			sink.put("\n");
 			sink.put(".");
-			sink.put(" ");
 		}
 
 
 		void print(Block g) {
-			sink.put(" ");
-			if (g.variables) {
-				sink.put("VAR ");
-				foreach(v;g.variables) {
-					print(v);
-					if (v !is g.variables[$-1]) sink.put(",");
-				}
-			}
-			sink.put(" ");
+			iLvl++;
 			if (g.constants) {
-				sink.put("CONST ");
+				print("CONST ".indentBy(iLvl));
 				foreach(c;g.constants) {
 					print(c);
-					if (c !is g.constants[$-1]) sink.put(",");
+					print(", ");
 				}
+				print(";\n");
 			}
-			sink.put(" ");
+			if (g.variables) {
+				print("VAR ".indentBy(iLvl));
+				foreach(v;g.variables) {
+					print(v);
+					print(", ");
+				}
+				print(";\n");
+			}
 			if (g.procedures) {
-				sink.put("PROCEDURE \n");
 				foreach(p;g.procedures) {
+					print("PROCEDURE ".indentBy(iLvl));
 					print(p);
-					if (p !is g.procedures[$-1]) sink.put(",");
 				}
 			}
+		
 			print(g.statement);
-			sink.put(" ");
 		}
 
 
@@ -165,23 +196,27 @@ string print(const Programm root) pure {
 			sink.put(" ");
 			sink.put("=");
 			sink.put(" ");
-			print(g.number);
+			print(g.init);
 		}
 
 
 		void print(VarDecl g) {
 			print(g.name);
+			sink.put(" ");
+			if (g.init) {
+				sink.put("=");
+				sink.put(" ");
+				print(g.init);
+			}
 		}
 
 
 		void print(ProDecl g) {
 			print(g.name);
-			sink.put(" ");
 			sink.put(";");
-			sink.put(" ");
 			print(g.block);
-			sink.put(" ");
-			sink.put(";");
+			--iLvl;
+			sink.put(";\n".indentBy(iLvl));
 		}
 
 
@@ -191,20 +226,25 @@ string print(const Programm root) pure {
 			sink.put(":=");
 			sink.put(" ");
 			print(g.expr);
-			sink.put(" ");
 		}
 
 
 		void print(BeginEndStatement g) {
 			sink.put("BEGIN");
-			sink.put(" ");
-			foreach(_e;g.statements) {
+			iLvl++;
+			newlineAfterStatement = false;
+			foreach(_e;g.statements[0..$-1]) {
 				print(_e);
-				print(";");
+				sink.put(";\n");
 			}
-			sink.put(" ");
-			sink.put("END");
-			sink.put(" ");
+
+			if (g.statements.length >= 1) {
+				print(g.statements[$-1]);
+				sink.put("\n");
+			}
+			newlineAfterStatement = true;
+			iLvl--;
+			sink.put("END".indentBy(iLvl));
 		}
 
 
@@ -216,7 +256,6 @@ string print(const Programm root) pure {
 			sink.put("THEN");
 			sink.put(" ");
 			print(g.stmt);
-			sink.put(" ");
 		}
 
 
@@ -228,7 +267,6 @@ string print(const Programm root) pure {
 			sink.put("DO");
 			sink.put(" ");
 			print(g.stmt);
-			sink.put(" ");
 		}
 
 
@@ -236,7 +274,13 @@ string print(const Programm root) pure {
 			sink.put("CALL");
 			sink.put(" ");
 			print(g.name);
+		}
+
+
+		void print(OutputStatement g) {
+			sink.put("!");
 			sink.put(" ");
+			print(g.expr);
 		}
 
 
@@ -244,7 +288,6 @@ string print(const Programm root) pure {
 			sink.put("ODD");
 			sink.put(" ");
 			print(g.expr);
-			sink.put(" ");
 		}
 
 
@@ -254,67 +297,56 @@ string print(const Programm root) pure {
 			print(g.op);
 			sink.put(" ");
 			print(g.rhs);
-			sink.put(" ");
 		}
 
 
 		void print(Equals g) {
 			sink.put("=");
-			sink.put(" ");
 		}
 
 
 		void print(Greater g) {
 			sink.put(">");
-			sink.put(" ");
 		}
 
 
 		void print(Less g) {
 			sink.put("<");
-			sink.put(" ");
 		}
 
 
 		void print(GreaterEq g) {
 			sink.put(">=");
-			sink.put(" ");
 		}
 
 
 		void print(LessEq g) {
 			sink.put("<=");
-			sink.put(" ");
 		}
 
 
 		void print(Hash g) {
 			sink.put("#");
-			sink.put(" ");
 		}
 
 
 		void print(Add g) {
 			sink.put("+");
-			sink.put(" ");
 		}
 
 
 		void print(Sub g) {
 			sink.put("-");
-			sink.put(" ");
 		}
 
 
 		void print(Mul g) {
 			sink.put("*");
-			sink.put(" ");
 		}
 
 
 		void print(Div g) {
 			sink.put("/");
-			sink.put(" ");
 		}
 
 
@@ -324,7 +356,6 @@ string print(const Programm root) pure {
 			print(g.op);
 			sink.put(" ");
 			print(g.rhs);
-			sink.put(" ");
 		}
 
 
@@ -334,28 +365,27 @@ string print(const Programm root) pure {
 			print(g.op);
 			sink.put(" ");
 			print(g.rhs);
-			sink.put(" ");
 		}
 
 
 		void print(ParenExpression g) {
 			sink.put("(");
-			sink.put(" ");
 			print(g.expr);
-			sink.put(" ");
 			sink.put(")");
-			sink.put(" ");
 		}
 
 
 		void print(PrimaryExpression g) {
-			if (g.number) {
-			print(g.number);
-			}			if (g.identifier) {
-			print(g.identifier);
-			}			if (g.paren) {
-			print(g.paren);
-			}			sink.put(" ");
+			if (g.isNegative) {
+				sink.put("-");
+			}
+			if (g.literal) {
+				print(g.literal);
+			} else if (g.identifier) {
+				print(g.identifier);
+			} else if (g.paren) {
+				print(g.paren);
+			}
 		}
 
 	}

@@ -12,7 +12,7 @@ version (Location) {
 		Location loc;
 	}
 } else {
-	abstract class PLNode {}
+//	abstract class PLNode {}
 }
 final class Identifier : PLNode {
 	char[] identifier;
@@ -27,6 +27,16 @@ final class Number : PLNode {
 
 	this(char[] number) pure {
 		this.number = number;
+	}
+}
+
+final class Literal : PLNode {
+	Number intp;
+	Number floatp;
+
+	this(Number intp, Number floatp) pure {
+		this.intp = intp;
+		this.floatp = floatp;
 	}
 }
 
@@ -50,43 +60,39 @@ final class Block : PLNode {
 		this.procedures = procedures;
 		this.statement = statement;
 	}
-
-	this(Block b) {
-		this.variables = b.variables.dup;
-		this.constants = b.constants.dup;
-		this.procedures = b.procedures.dup;
-
-		this.statement = null;
-	}
 }
 
 abstract class Declaration : PLNode {}
 
 final class ConstDecl : Declaration {
 	Identifier name;
-	Number number;
+	PrimaryExpression init;
 
-	this(Identifier name, Number number) pure {
+	this(Identifier name, PrimaryExpression init) pure {
 		this.name = name;
-		this.number = number;
+		this.init = init;
 	}
 }
 
 final class VarDecl : Declaration {
 	Identifier name;
+	PrimaryExpression init;
 
-	this(Identifier name) pure {
+	this(Identifier name, PrimaryExpression init) pure {
 		this.name = name;
+		this.init = init;
 	}
 }
 
 final class ProDecl : Declaration {
 	Identifier name;
 	Block block;
+	VarDecl[] arguments;
 
-	this(Identifier name, Block block) pure {
+	this(Identifier name, Block block, VarDecl[] arguments) pure {
 		this.name = name;
 		this.block = block;
+		this.arguments = arguments;
 	}
 }
 
@@ -132,9 +138,19 @@ final class WhileStatement : Statement {
 
 final class CallStatement : Statement {
 	Identifier name;
+	Expression[] arguments;
 
-	this(Identifier name) pure {
+	this(Identifier name, Expression[] arguments) pure {
 		this.name = name;
+		this.arguments = arguments;
+	}
+}
+
+final class OutputStatement : Statement {
+	Expression expr;
+
+	this(Expression expr) pure {
+		this.expr = expr;
 	}
 }
 
@@ -221,14 +237,17 @@ final class ParenExpression : Expression {
 }
 
 final class PrimaryExpression : Expression {
-	Number number;
+	bool isNegative;
+	Literal literal;
 	Identifier identifier;
 	ParenExpression paren;
 
-	this(Number number, Identifier identifier, ParenExpression paren) pure {
-		this.number = number;
+	this(bool isNegative, Literal literal, Identifier identifier, ParenExpression paren) pure {
+		this.isNegative = isNegative;
+		this.literal = literal;
 		this.identifier = identifier;
 		this.paren = paren;
 	}
 }
+
 

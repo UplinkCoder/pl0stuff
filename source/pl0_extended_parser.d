@@ -1,7 +1,7 @@
-version = Location;
+import pl0_extended_ast;
+import pl0_extended_token;
 
-import pl0_ast;
-import pl0_token;
+version = Location;
 
 immutable string header = `
 		version (Location) {
@@ -15,7 +15,8 @@ immutable string header = `
 
 string footer(alias T)() if (is(T : PLNode) || is(typeof(T):PLNode)) {
 	static if (!is(T : PLNode) && is(typeof(T):PLNode)) {
-		auto m = __traits(identifier, T) ~ ";\n";
+		auto m = __traits(identifier, T);
+		auto r = m ~ ".loc = loc;\n\t\t\t return " ~ m ~ ";\n";
 	} else {
 		auto ta = [__traits(derivedMembers, T)[0 .. ((!$) ? $ : $-1)]];
 		static if (is(typeof(ta)==void[])) {
@@ -24,20 +25,19 @@ string footer(alias T)() if (is(T : PLNode) || is(typeof(T):PLNode)) {
 			import std.range;
 			auto ms = ta.join(", ");
 		}
-		auto m = "new " ~ __traits(identifier, T) ~ "(" ~ ms ~ ");\n";
+		auto m = "new " ~ __traits(identifier, T) ~ "(" ~ ms ~ ")\n";
+		auto r = "auto ret = " ~ m ~ ";\n\t\t\t"  ~"ret.loc = loc;\n\t\t\treturn ret;\n";
 	}
-		immutable string footer = `
+	immutable string footer = `
 		version (Location) {
 			auto lastToken = peekToken(-1);
 			loc.length = lastToken.pos - firstToken.pos + lastToken.length;
-			auto ret = ` ~ m ~ `
-			ret.loc = loc;
-			return ret;
+			` ~ r ~ `
 		} else {
-			return ` ~ m ~ `
+			return ` ~ m ~ `;
 		}
 `;
-
+	
 	return footer;
 }
 
@@ -47,9 +47,12 @@ Programm parse(in Token[] tokens) pure {
 		const(Token[]) tokens;
 		uint pos;
 		Token lastMatched;
-		
+
 		const(Token) peekToken(int offset) {
-			assert(pos + offset <= tokens.length && pos + offset >= 0);
+			if (pos + offset > tokens.length - 1) {
+				return Token.init;
+			}
+			assert(pos + offset >= 0, "Trying to read outside of sourceCode");
 			return tokens[pos + offset];
 		}
 		
@@ -82,7 +85,7 @@ Programm parse(in Token[] tokens) pure {
 				enforce(opt_match(t), "Expected : " ~ to!string(t) ~ " Got : " ~ to!string(peekToken(0)) );
 				return lastMatched;
 			} else {
-				return ((opt_match(t) ? lastMatched : TokenType.TT_0));
+				return ((opt_match(t) ? lastMatched : Token.init));
 			}
 		}
 
@@ -90,28 +93,18 @@ Programm parse(in Token[] tokens) pure {
 		bool isPLNode() {
 			return isProgramm();
 		}
-
-		bool isProDecl() {
-			return peekMatch([TokenType.TT_Identifier, TokenType.TT_11]);
-		}
-
 		bool isBlock() {
-			return peekMatch([TokenType.TT_19]) 
+			return peekMatch([TokenType.TT_21]) 
 				|| peekMatch([TokenType.TT_26])
-				|| peekMatch([TokenType.TT_24])
+				|| peekMatch([TokenType.TT_28])
 				|| isStatement();
 		}
-
-		bool isConstDecl() {
-			return peekMatch([TokenType.TT_Identifier, TokenType.TT_14]);
-		}
-
 		bool isProgramm() {
 			return isBlock();
 		}
 
-		bool isVarDecl() {
-			return peekMatch([TokenType.TT_Identifier]);
+		bool isLiteral() {
+			return peekMatch([TokenType.TT_Number]);
 		}
 
 		bool isNumber() {
@@ -122,45 +115,62 @@ Programm parse(in Token[] tokens) pure {
 			return peekMatch([TokenType.TT_Identifier]);
 		}
 
+		bool isProDecl() {
+			return peekMatch([TokenType.TT_Identifier, TokenType.TT_12]);
+		}
+
+		bool isConstDecl() {
+			return peekMatch([TokenType.TT_Identifier, TokenType.TT_15]);
+		}
+
+		bool isVarDecl() {
+			return peekMatch([TokenType.TT_Identifier]);
+		}
+
 		bool isStatement() {
 			return isIfStatement()
 			|| isWhileStatement()
-			|| isNamedExpression()
+			|| isAssignmentStatement()
 			|| isBeginEndStatement()
-			|| isCallStatement();
+			|| isCallStatement()
+			|| isOutputStatement();
 		}
 
 		bool isIfStatement() {
-			return peekMatch([TokenType.TT_22]);
+			return peekMatch([TokenType.TT_24]);
 		}
 
 		bool isWhileStatement() {
-			return peekMatch([TokenType.TT_27]);
+			return peekMatch([TokenType.TT_29]);
 		}
 
-		bool isNamedExpression() {
-			return peekMatch([TokenType.TT_Identifier, TokenType.TT_10]);
+		bool isAssignmentStatement() {
+			return peekMatch([TokenType.TT_Identifier, TokenType.TT_11]);
 		}
 
 		bool isBeginEndStatement() {
-			return peekMatch([TokenType.TT_17]);
+			return peekMatch([TokenType.TT_19]);
 		}
 
 		bool isCallStatement() {
-			return peekMatch([TokenType.TT_18]);
+			return peekMatch([TokenType.TT_20]);
+		}
+
+		bool isOutputStatement() {
+			return peekMatch([TokenType.TT_1]);
 		}
 
 		bool isCondition() {
-			return isRelCondition()
-			|| isOddCondition();
+			return isOddCondition()
+				|| isExpression();
 		}
 
-		bool isRelCondition() {
-			return isExpression();
-		}
+//		bool isRelCondition() {
+//			return peekMatch([TokenType.TT_Expression, TokenType.TT_RelOp]);
+//		}
 
 		bool isOddCondition() {
-			return peekMatch([TokenType.TT_23]);
+			return peekMatch([TokenType.TT_25]);
 		}
 
 		bool isRelOp() {
@@ -173,27 +183,27 @@ Programm parse(in Token[] tokens) pure {
 		}
 
 		bool isEquals() {
-			return peekMatch([TokenType.TT_14]);
-		}
-
-		bool isGreater() {
 			return peekMatch([TokenType.TT_15]);
 		}
 
-		bool isLess() {
-			return peekMatch([TokenType.TT_12]);
-		}
-
-		bool isGreaterEq() {
+		bool isGreater() {
 			return peekMatch([TokenType.TT_16]);
 		}
 
-		bool isLessEq() {
+		bool isLess() {
 			return peekMatch([TokenType.TT_13]);
 		}
 
+		bool isGreaterEq() {
+			return peekMatch([TokenType.TT_17]);
+		}
+
+		bool isLessEq() {
+			return peekMatch([TokenType.TT_14]);
+		}
+
 		bool isHash() {
-			return peekMatch([TokenType.TT_1]);
+			return peekMatch([TokenType.TT_2]);
 		}
 
 		bool isAddOp() {
@@ -202,11 +212,11 @@ Programm parse(in Token[] tokens) pure {
 		}
 
 		bool isAdd() {
-			return peekMatch([TokenType.TT_5]);
+			return peekMatch([TokenType.TT_6]);
 		}
 
 		bool isSub() {
-			return peekMatch([TokenType.TT_7]);
+			return peekMatch([TokenType.TT_8]);
 		}
 
 		bool isMulOp() {
@@ -215,15 +225,17 @@ Programm parse(in Token[] tokens) pure {
 		}
 
 		bool isMul() {
-			return peekMatch([TokenType.TT_4]);
+			return peekMatch([TokenType.TT_5]);
 		}
 
 		bool isDiv() {
-			return peekMatch([TokenType.TT_9]);
+			return peekMatch([TokenType.TT_10]);
 		}
 
 		bool isExpression() {
-			return isPrimaryExpression();
+			return isAddExprssion()
+			|| isMulExpression()
+			|| isPrimaryExpression();
 		}
 
 		bool isAddExprssion() {
@@ -235,80 +247,97 @@ Programm parse(in Token[] tokens) pure {
 		}
 
 		bool isParenExpression() {
-			return peekMatch([TokenType.TT_2]);
+			return peekMatch([TokenType.TT_3]);
 		}
 
 		bool isPrimaryExpression() {
-			return peekMatch([TokenType.TT_Number])
-				|| peekMatch([TokenType.TT_Identifier])
-				|| isParenExpression();
+			return peekMatch([TokenType.TT_Identifier])
+			|| peekMatch([TokenType.TT_Number])
+			|| peekMatch([TokenType.TT_3])
+			|| peekMatch([TokenType.TT_8, TokenType.TT_Identifier])
+			|| peekMatch([TokenType.TT_8, TokenType.TT_Number])
+			|| peekMatch([TokenType.TT_8, TokenType.TT_3]);
 		}
 
 		PLNode parsePLNode() {
 			PLNode p;
-			if (isProgramm()) {
+			if (isLiteral()) {
+				p = parseLiteral();
+			} else if (isProgramm()) {
 				p = parseProgramm();
-			}
+			} 
 
 			return p;
 		}
 
 		Identifier parseIdentifier() {
-			mixin(header);
 			char[] identifier;
 
 			identifier = match(TokenType.TT_Identifier).data;
 
-			mixin(footer!Identifier);
+		return new Identifier(identifier);
 		}
 
 		Number parseNumber() {
 			char[] number;
-			mixin(header);
+
 			number = match(TokenType.TT_Number).data;
 
-			mixin(footer!Number);
+		return new Number(number);
+		}
+
+		Literal parseLiteral() {
+			Number intp;
+			Number floatp;
+			mixin(header);
+
+			intp = parseNumber();
+			if (opt_match(TokenType.TT_9)) {
+				floatp = parseNumber();
 			}
+
+			mixin(footer!Literal);
+		}
 
 		Programm parseProgramm() {
 			Block block;
 			mixin(header);
+
 			block = parseBlock();
-			match(TokenType.TT_8);
+			match(TokenType.TT_9);
 
 			mixin(footer!Programm);
 		}
 
 		Block parseBlock() {
-			Statement statement;
 			ConstDecl[] constants;
 			VarDecl[] variables;
 			ProDecl[] procedures;
+			Statement statement;
 			mixin(header);
 
-			if (opt_match(TokenType.TT_19)) {
+			if (opt_match(TokenType.TT_21)) {
 
 				constants ~= parseConstDecl();
-				while(opt_match(TokenType.TT_6)) {
+				while(opt_match(TokenType.TT_7)) {
 						constants ~= parseConstDecl();
 				}
-				match(TokenType.TT_11);
+				match(TokenType.TT_12);
+			}
+			if (opt_match(TokenType.TT_28)) {
+
+				variables ~= parseVarDecl();
+				while(opt_match(TokenType.TT_7)) {
+						variables ~= parseVarDecl();
+				}
+				match(TokenType.TT_12);
 			}
 			if (opt_match(TokenType.TT_26)) {
 
-				variables ~= parseVarDecl();
-				while(opt_match(TokenType.TT_6)) {
-						variables ~= parseVarDecl();
-				}
-				match(TokenType.TT_11);
-			}
-			if (opt_match(TokenType.TT_24)) {
-
 				procedures ~= parseProDecl();
-				while(opt_match(TokenType.TT_24)) {
+				while(opt_match(TokenType.TT_26)) {
 						procedures ~= parseProDecl();
 				}
-				match(TokenType.TT_11);
 			}
 			statement = parseStatement();
 
@@ -317,19 +346,25 @@ Programm parse(in Token[] tokens) pure {
 
 		ConstDecl parseConstDecl() {
 			Identifier name;
-			Number number;
+			PrimaryExpression init;
 			mixin(header);
+
 			name = parseIdentifier();
-			match(TokenType.TT_14);
-			number = parseNumber();
+			match(TokenType.TT_15);
+			init = parsePrimaryExpression();
 
 			mixin(footer!ConstDecl);
 		}
 
 		VarDecl parseVarDecl() {
 			Identifier name;
+			PrimaryExpression init;
 			mixin(header);
+
 			name = parseIdentifier();
+			if (opt_match(TokenType.TT_15)) {
+				init = parsePrimaryExpression();
+			}
 
 			mixin(footer!VarDecl);
 		}
@@ -337,19 +372,29 @@ Programm parse(in Token[] tokens) pure {
 		ProDecl parseProDecl() {
 			Identifier name;
 			Block block;
+			VarDecl[] arguments;
 			mixin(header);
+
 			name = parseIdentifier();
-			match(TokenType.TT_11);
+			match(TokenType.TT_12);
+			if (opt_match(TokenType.TT_18)) {
+				arguments ~= parseVarDecl();
+				while(opt_match(TokenType.TT_7)) {
+						arguments ~= parseVarDecl();
+				}
+				match(TokenType.TT_12);
+			}
 			block = parseBlock();
+			match(TokenType.TT_12);
+
 			mixin(footer!ProDecl);
 		}
 
 		Statement parseStatement() {
 			Statement s;
 			mixin(header);
-
-			if (isNamedExpression()) {
-				s = parseNamedExpression();
+			if (isAssignmentStatement()) {
+				s = parseAssignmentStatement();
 			} else if (isBeginEndStatement()) {
 				s = parseBeginEndStatement();
 			} else if (isIfStatement()) {
@@ -358,17 +403,27 @@ Programm parse(in Token[] tokens) pure {
 				s = parseWhileStatement();
 			} else if (isCallStatement()) {
 				s = parseCallStatement();
+			} else if (isOutputStatement()) {
+				s = parseOutputStatement();
+			} else {
+				import std.conv;
+				debug {
+					import std.stdio;
+					__ctfeWriteln(isStatement());
+				}
+				assert(s !is null, to!(string)(peekToken(0)));
 			}
+
 			mixin(footer!s);
 		}
 
-		AssignmentStatement parseNamedExpression() {
+		AssignmentStatement parseAssignmentStatement() {
 			Identifier name;
 			Expression expr;
 			mixin(header);
 
 			name = parseIdentifier();
-			match(TokenType.TT_10);
+			match(TokenType.TT_11);
 			expr = parseExpression();
 
 			mixin(footer!AssignmentStatement);
@@ -377,13 +432,13 @@ Programm parse(in Token[] tokens) pure {
 		BeginEndStatement parseBeginEndStatement() {
 			Statement[] statements;
 			mixin(header);
-			match(TokenType.TT_17);
 
-			while(isStatement()) {
+			match(TokenType.TT_19);
+			do {
 				statements ~= parseStatement();
-				opt_match(TokenType.TT_11);
-			}
-			match(TokenType.TT_21);
+			} while(opt_match(TokenType.TT_12));
+
+			match!(false)(TokenType.TT_23);
 
 			mixin(footer!BeginEndStatement);
 		}
@@ -393,9 +448,9 @@ Programm parse(in Token[] tokens) pure {
 			Statement stmt;
 			mixin(header);
 
-			match(TokenType.TT_22);
+			match(TokenType.TT_24);
 			cond = parseCondition();
-			match(TokenType.TT_25);
+			match(TokenType.TT_27);
 			stmt = parseStatement();
 
 			mixin(footer!IfStatement);
@@ -404,12 +459,11 @@ Programm parse(in Token[] tokens) pure {
 		WhileStatement parseWhileStatement() {
 			Condition cond;
 			Statement stmt;
-
 			mixin(header);
 
-			match(TokenType.TT_27);
+			match(TokenType.TT_29);
 			cond = parseCondition();
-			match(TokenType.TT_20);
+			match(TokenType.TT_22);
 			stmt = parseStatement();
 
 			mixin(footer!WhileStatement);
@@ -417,40 +471,57 @@ Programm parse(in Token[] tokens) pure {
 
 		CallStatement parseCallStatement() {
 			Identifier name;
-
+			Expression[] arguments;
 			mixin(header);
 
-			match(TokenType.TT_18);
+			match(TokenType.TT_20);
 			name = parseIdentifier();
+			if (opt_match(TokenType.TT_18)) {
+				arguments ~= parseExpression;
+				while(opt_match(TokenType.TT_7)) {
+					arguments ~= parseExpression();
+				}
+			}
 
 			mixin(footer!CallStatement);
+		}
+
+		OutputStatement parseOutputStatement() {
+			Expression expr;
+			mixin(header);
+
+			match(TokenType.TT_1);
+			expr = parseExpression();
+
+			mixin(footer!OutputStatement);
 		}
 
 		Condition parseCondition() {
 			Condition c;
 			mixin(header);
+
 			if (isOddCondition()) {
 				c = parseOddCondition();
-			} else if (isRelCondition()) {
+			} else {
 				c = parseRelCondition();
 			}
+
 			mixin(footer!c);
 		}
 
 		OddCondition parseOddCondition() {
 			Expression expr;
-			mixin(header);
-			match(TokenType.TT_23);
+
+			match(TokenType.TT_25);
 			expr = parseExpression();
 
-			mixin(footer!OddCondition);
+		return new OddCondition(expr);
 		}
 
 		RelCondition parseRelCondition() {
 			Expression lhs;
 			RelOp op;
 			Expression rhs;
-
 			mixin(header);
 
 			lhs = parseExpression();
@@ -462,7 +533,6 @@ Programm parse(in Token[] tokens) pure {
 
 		RelOp parseRelOp() {
 			RelOp r;
-			mixin(header);
 			if (isEquals()) {
 				r = parseEquals();
 			} else if (isGreater()) {
@@ -475,50 +545,51 @@ Programm parse(in Token[] tokens) pure {
 				r = parseLessEq();
 			} else if (isHash()) {
 				r = parseHash();
-			}
+			} 
 
-			mixin(footer!r);
+			return r;
 		}
 
 		Equals parseEquals() {
-			mixin(header);
-			match(TokenType.TT_14);
 
-			mixin(footer!Equals);
+			match(TokenType.TT_15);
+
+		return new Equals();
 		}
 
 		Greater parseGreater() {
-			mixin(header);
-			match(TokenType.TT_15);
 
-			mixin(footer!Greater);
+			match(TokenType.TT_16);
+
+		return new Greater();
 		}
 
 		Less parseLess() {
-			mixin(header);
-			match(TokenType.TT_12);
-			mixin(footer!Less);
+
+			match(TokenType.TT_13);
+
+		return new Less();
 		}
 
 		GreaterEq parseGreaterEq() {
 
-			match(TokenType.TT_16);
+			match(TokenType.TT_17);
 
-			return new GreaterEq();
+		return new GreaterEq();
 		}
 
 		LessEq parseLessEq() {
 
-			match(TokenType.TT_13);
+			match(TokenType.TT_14);
 
-			return new LessEq();
+		return new LessEq();
 		}
 
 		Hash parseHash() {
 
-			match(TokenType.TT_1);
+			match(TokenType.TT_2);
 
-			return new Hash();
+		return new Hash();
 		}
 
 		AddOp parseAddOp() {
@@ -527,23 +598,23 @@ Programm parse(in Token[] tokens) pure {
 				a = parseAdd();
 			} else if (isSub()) {
 				a = parseSub();
-			}
+			} 
 
 			return a;
 		}
 
 		Add parseAdd() {
 
-			match(TokenType.TT_5);
+			match(TokenType.TT_6);
 
-			return new Add();
+		return new Add();
 		}
 
 		Sub parseSub() {
 
-			match(TokenType.TT_7);
+			match(TokenType.TT_8);
 
-			return new Sub();
+		return new Sub();
 		}
 
 		MulOp parseMulOp() {
@@ -552,23 +623,23 @@ Programm parse(in Token[] tokens) pure {
 				m = parseMul();
 			} else if (isDiv()) {
 				m = parseDiv();
-			}
+			} 
 
 			return m;
 		}
 
 		Mul parseMul() {
 
-			match(TokenType.TT_4);
+			match(TokenType.TT_5);
 
-			return new Mul();
+		return new Mul();
 		}
 
 		Div parseDiv() {
 
-			match(TokenType.TT_9);
+			match(TokenType.TT_10);
 
-			return new Div();
+		return new Div();
 		}
 
 		enum ExpressionRCEnum {
@@ -584,11 +655,11 @@ Programm parse(in Token[] tokens) pure {
 				e = parsePrimaryExpression();
 			} 
 
-			if (isAddExprssion() && __rc != ExpressionRCEnum.__AddExprssion) {
+			if (isAddExprssion()) {
 				e = parseAddExprssion(e);
-			} else if (isMulExpression() && __rc != ExpressionRCEnum.__MulExpression) {
+			} else if (isMulExpression()) {
 				e = parseMulExpression(e);
-			} 
+			}
 
 			mixin(footer!e);
 		}
@@ -598,10 +669,11 @@ Programm parse(in Token[] tokens) pure {
 			AddOp op;
 			Expression rhs;
 			mixin(header);
-			//lhs = parseExpression(ExpressionRCEnum.__AddExprssion);
+
 			lhs = prev;
 			op = parseAddOp();
 			rhs = parseExpression();
+
 
 			mixin(footer!AddExprssion);
 		}
@@ -611,6 +683,7 @@ Programm parse(in Token[] tokens) pure {
 			MulOp op;
 			Expression rhs;
 			mixin(header);
+
 			lhs = prev;
 			op = parseMulOp();
 			rhs = parseExpression();
@@ -622,21 +695,25 @@ Programm parse(in Token[] tokens) pure {
 			Expression expr;
 			mixin(header);
 
-			match(TokenType.TT_2);
-			expr = parseExpression();
 			match(TokenType.TT_3);
+			expr = parseExpression();
+			match(TokenType.TT_4);
 
 			mixin(footer!ParenExpression);
 		}
 
 		PrimaryExpression parsePrimaryExpression() {
-			Number number;
+			bool isNegative;
+			Literal literal;
 			Identifier identifier;
 			ParenExpression paren;
 			mixin(header);
 
-			if (isNumber()) {
-				number = parseNumber();
+			if (opt_match(TokenType.TT_8)) {
+				isNegative = true;
+			}
+			if (isLiteral()) {
+				literal = parseLiteral();
 			} else if (isIdentifier()) {
 				identifier = parseIdentifier();
 			} else if (isParenExpression()) {
@@ -646,7 +723,8 @@ Programm parse(in Token[] tokens) pure {
 			mixin(footer!PrimaryExpression);
 		}
 
+
 	}
 
-	return Parser(tokens).parseProgramm();
+	return Parser(tokens).parseProgramm;
 }
