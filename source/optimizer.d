@@ -1,93 +1,100 @@
-﻿version = Extended;
-version (Extended) {
-	import pl0_extended_analyzer;
-	import pl0_extended_ast;
-	import pl0_extended_printer;
-} else {
-	import pl0_ast;
-	import pl0_analyzer;
-}
+﻿import pl0_extended_analyzer;
+import pl0_extended_ast;
+import pl0_extended_printer;
 
-struct CallInliner {
-	Analyzer* a;
-	
-	void inlineCall(Analyzer.nwp *csn/*CallStatement c*/) {
-		auto c = cast(CallStatement) *csn;
-		assert(c !is null, "Unexpected NodeType: " ~ typeid(csn.node).stringof);
-		{
-			auto procSymbol = a.getNearestSymbol(a.getParentBlock(csn), c.name);
-			assert(procSymbol !is null && procSymbol.type == Analyzer.Symbol.SymbolType._ProDecl);
-			ProDecl procedure = procSymbol.p;
-			if (!procedure.block.variables && !procedure.block.constants && !procedure.block.procedures) {
-				replaceStmt(a, csn, procedure.block.statement);
-			} else 	{
-				// don't replace the call with the procedures body if there are variables and stuff
-			}
-		}
-		
-		return;
-		//mergeBlockSymbols(procedure.block, csn.parent);
-		//Programm result = p.clone;
-	}
-}
-
-//void replaceNode (PLNode dst, PLNode src) {
-//
-//}
-
-void replaceStmt (Analyzer* a, Analyzer.nwp* dst, Statement src) {
-	if (auto bes = cast (BeginEndStatement)dst.parent.node) {
-		foreach(ref stmt;bes.statements) {
-			if (stmt is (*dst).node) {
-				stmt = src;
-				break;
-			}
-		}
-	} else if (auto bl = cast (Block)(*(*dst).parent).node) {
-		bl.statement = src;
-	} else {
-		debug {import std.stdio; writeln(typeid(dst.parent.node));}
-	}
-	a.allNodesFilled = false;
-	a.allNodes = a.getAllNodes();
-}
-
-void replaceExpr (Analyzer* a, Analyzer.nwp* dst, Expression src) {
-	if (auto ae = cast (AddExprssion)dst.parent.node) {
-		if (ae.lhs is dst.node) {
-			ae.lhs = src;
-		} else {
-			ae.rhs = src;
-		}
-	} else if (auto me = cast (MulExpression)dst.parent.node) {
-		if (me.lhs is dst.node) {
-			me.lhs = src;
-		} else {
-			me.rhs = src;
-		}
-	} else if (auto as = cast (AssignmentStatement)dst.parent.node) {
-		if (as.expr is dst.node) {
-			as.expr = src;
-		}
-	} else {
-		debug {import std.stdio; writeln(typeid(dst.parent.node));}
-	}
-	a.allNodesFilled = false;
-	a.allNodes = a.getAllNodes();
-}
-
-
-void reduceBeginEnd(Analyzer* a, Analyzer.nwp* n/*BeginEndStatement s*/) {
-	auto be = cast(BeginEndStatement) n.node;
-	assert(be !is null, "Unexpected NodeType: " ~ typeid(n.node).stringof);
-	if (be.statements.length == 1) {
-		replaceStmt(a, n, be.statements[0]);
-	}
+struct OptimizerState {
+	uint stateSyncId;
+	Analyzer.nwp*[][Analyzer.Symbol] AssignmentStatementsByVarSymbol;
 }
 
 import std.algorithm;
 import std.range;
 import std.array;
+import ast_modifier;
+
+/** run this at the last possible moment */
+void eliminateVariableAssignments(Analyzer* a) {
+	static OptimizerState state;
+	
+	//	if (a.stateSyncId != state.stateSyncId) {
+	state = state.init;
+	foreach (as_node;a.allNodes.filter!(n => cast(AssignmentStatement)n.node)) {
+		auto as = cast(AssignmentStatement*)&as_node.node;
+		if (auto pe = cast(PrimaryExpression) (as.expr)) {
+			//Assignments to itself get eliminated directly!
+			if (pe.identifier && pe.identifier.identifier == as.name.identifier) {
+				removeStmt(a, as_node);
+				continue;
+				// do not consider statement;
+			}
+		}
+		auto varSymbol = a.getNearestSymbol(a.getParentBlock(as_node), as.name);
+		assert (varSymbol !is null && varSymbol.type == Analyzer.Symbol.SymbolType._VarDecl);
+		state.AssignmentStatementsByVarSymbol[*varSymbol] ~= as_node;
+	}
+	//	}
+
+	foreach (pe_node;a.allNodes.filter!(n => cast(PrimaryExpression)n.node 
+			&& (cast(PrimaryExpression*)&n.node).identifier)) {
+		auto pe = cast(PrimaryExpression*)&pe_node.node;
+		auto varSymbol = a.getNearestSymbol(a.getParentBlock(pe_node), pe.identifier);
+		assert(varSymbol);
+		if (varSymbol.type == Analyzer.Symbol.SymbolType._VarDecl) {
+			if (auto _pe = cast(PrimaryExpression)(cast(AssignmentStatement*)&(state.AssignmentStatementsByVarSymbol[*varSymbol][0].node)).expr) {
+				if (!varSymbol.v._init && _pe.literal !is null) {
+					removeStmt(a, state.AssignmentStatementsByVarSymbol[*varSymbol][0]);
+					varSymbol.v._init = _pe;
+					continue;
+				}
+			}
+			auto as_node = a.getNearest!(AssignmentStatement)(Analyzer.getParentWithParent!(Statement)(pe_node), state.AssignmentStatementsByVarSymbol[*varSymbol]);
+			if (as_node !is null) {
+				auto as = cast(AssignmentStatement*)&as_node.node;
+				if (auto pas = Analyzer.getParent!(AssignmentStatement)(pe_node)) {
+					continue;
+				}
+				//writeln(as.print);
+				replaceExpr(a, pe_node, as.expr);
+				removeStmt(a, as_node);
+			}
+		} else {
+			continue;
+		}
+	}
+
+}
+
+void reduceBeginEnd(Analyzer* a) {
+	foreach (be_node;a.allNodes.filter!(n => cast(BeginEndStatement)n.node
+			&& (((cast(BeginEndStatement*)&(n.node)).statements.length == 1)
+				|| cast(BeginEndStatement)n.parent.node))) {
+		auto be = cast(BeginEndStatement*)&be_node.node;
+		if (be.statements.length == 1) {
+			replaceStmt(a, be_node, be.statements[0]);
+		} else {
+			// we can merge with parent
+			auto pbe = cast(BeginEndStatement*)&(be_node.parent.node);
+			replaceStmts(a, be_node, be.statements);
+		}
+	}
+}
+
+void inlineCall(Analyzer* a) {
+	foreach (cs_node;a.allNodes.filter!(n => cast(CallStatement)n.node)) {
+		auto c = cast(CallStatement) cs_node.node;
+		
+		auto procSymbol = a.getNearestSymbol(a.getParentBlock(cs_node), c.name);
+		assert(procSymbol !is null && procSymbol.type == Analyzer.Symbol.SymbolType._ProDecl);
+		ProDecl procedure = procSymbol.p;
+		if (!procedure.block.variables && !procedure.block.constants && !procedure.block.procedures) {
+			replaceStmt(a, cs_node, procedure.block.statement);
+		} else 	{
+			// don't replace the call with the procedures body if there are variables and stuff
+		}
+		
+	}
+}
+
 void rewriteConst(Analyzer *a) {
 	foreach(pe_node;a.allNodes
 		.filter!(n => cast(PrimaryExpression)n.node !is null)
@@ -95,8 +102,7 @@ void rewriteConst(Analyzer *a) {
 	{
 		auto s = a.getNearestSymbol(a.getParentBlock(pe_node), (cast(PrimaryExpression*)&pe_node.node).identifier);
 		if (s !is null && s.type == Analyzer.Symbol.SymbolType._ConstDecl) {
-			debug {import std.stdio;writeln("rewriting Const ",s.c.name.identifier);}
-			replaceExpr(a, pe_node, s.c.init);
+			replaceExpr(a, pe_node, s.c._init);
 		}
 	}
 	a.allNodesFilled = false;
@@ -108,7 +114,7 @@ void removeUnreferancedSymbols(Analyzer *a) {
 	UsedSymbolIds = assumeSorted(UsedSymbolIds).release;
 	
 	if (UsedSymbolIds.length != a.stable.symbolById.length) {
-		foreach(id; 0 .. a.stable.symbolById.length) {
+		foreach(id; 0 .. cast (uint) a.stable.symbolById.length) {
 			if (!UsedSymbolIds.length || id != UsedSymbolIds[0]) {
 				a.removeSymbol(a.stable.symbolById[id]);
 			} else {
@@ -117,6 +123,7 @@ void removeUnreferancedSymbols(Analyzer *a) {
 		}
 		a.allNodesFilled = false;
 		a.allNodes = a.getAllNodes();
+		a.fillSymbolTable();
 	}
 }
 
@@ -128,7 +135,7 @@ uint[] getAllUsedSymbolIds(Analyzer* a) {
 		.filter!(n => cast(PrimaryExpression)n.node !is null)
 		.filter!(n => (cast(PrimaryExpression*)&n.node).identifier !is null))
 	{
-		auto s = a.getNearestSymbol(a.getParentBlock(pe_node), (cast(PrimaryExpression*)&pe_node.node).identifier);
+		auto s = a.getNearestSymbol(Analyzer.getParentBlock(pe_node), (cast(PrimaryExpression*)&pe_node.node).identifier);
 		if (s !is null) {
 			usedIds ~= s.id; 
 		}
@@ -137,7 +144,7 @@ uint[] getAllUsedSymbolIds(Analyzer* a) {
 	foreach(cs_node;a.allNodes
 		.filter!(n => cast(CallStatement)n.node !is null))
 	{
-		auto s = a.getNearestSymbol(a.getParentBlock(cs_node), (cast(CallStatement*)&cs_node.node).name);
+		auto s = a.getNearestSymbol(Analyzer.getParentBlock(cs_node), (cast(CallStatement*)&cs_node.node).name);
 		if (s !is null) {
 			usedIds ~= s.id; 
 		}
