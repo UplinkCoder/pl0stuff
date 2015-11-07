@@ -272,18 +272,16 @@ Programm parse(in Token[] tokens) pure {
 
 		Identifier parseIdentifier() {
 			char[] identifier;
-
+			mixin(header);
 			identifier = match(TokenType.TT_Identifier).data;
-
-		return new Identifier(identifier);
+			mixin(footer!Identifier);
 		}
 
 		Number parseNumber() {
 			char[] number;
-
+			mixin(header);
 			number = match(TokenType.TT_Number).data;
-
-		return new Number(number);
+			mixin(footer!Number);
 		}
 
 		Literal parseLiteral() {
@@ -346,24 +344,24 @@ Programm parse(in Token[] tokens) pure {
 
 		ConstDecl parseConstDecl() {
 			Identifier name;
-			PrimaryExpression init;
+			PrimaryExpression _init;
 			mixin(header);
 
 			name = parseIdentifier();
 			match(TokenType.TT_15);
-			init = parsePrimaryExpression();
+			_init = parsePrimaryExpression();
 
 			mixin(footer!ConstDecl);
 		}
 
 		VarDecl parseVarDecl() {
 			Identifier name;
-			PrimaryExpression init;
+			PrimaryExpression _init;
 			mixin(header);
 
 			name = parseIdentifier();
 			if (opt_match(TokenType.TT_15)) {
-				init = parsePrimaryExpression();
+				_init = parsePrimaryExpression();
 			}
 
 			mixin(footer!VarDecl);

@@ -66,21 +66,21 @@ abstract class Declaration : PLNode {}
 
 final class ConstDecl : Declaration {
 	Identifier name;
-	PrimaryExpression init;
+	PrimaryExpression _init;
 
-	this(Identifier name, PrimaryExpression init) pure {
+	this(Identifier name, PrimaryExpression _init) pure {
 		this.name = name;
-		this.init = init;
+		this._init = _init;
 	}
 }
 
 final class VarDecl : Declaration {
 	Identifier name;
-	PrimaryExpression init;
+	PrimaryExpression _init;
 
-	this(Identifier name, PrimaryExpression init) pure {
+	this(Identifier name, PrimaryExpression _init) pure {
 		this.name = name;
-		this.init = init;
+		this._init = _init;
 	}
 }
 
