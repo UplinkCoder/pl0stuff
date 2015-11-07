@@ -1,7 +1,7 @@
 import pl0_extended_ast;
 import std.array;
 
-const(char)[] indentBy(const char[] str, const int indentLevel) pure {
+const(char)[] indentBy(const char[] str, const uint indentLevel) pure {
 	char[] indent;
 	//indent.reserve(5);
 	foreach(t;0..indentLevel) {
@@ -15,8 +15,10 @@ string print(const PLNode root) pure {
 	
 	struct Printer {
 		Appender!(char[]) sink;
-		uint iLvl;
+		int iLvl = -1;
+		uint beginEndLevel;
 		bool newlineAfterStatement = true;
+		bool lastInBlock;
 		void print(const char c) {
 			sink.put([c]);
 		}
@@ -165,29 +167,32 @@ string print(const PLNode root) pure {
 		void print(Block g) {
 			iLvl++;
 			if (g.constants) {
-				print("CONST ".indentBy(iLvl));
-				foreach(c;g.constants) {
+				print("\nCONST ".indentBy(iLvl));
+				foreach(c;g.constants[0 .. $-1]) {
 					print(c);
 					print(", ");
 				}
+				print(g.constants[$-1]);
 				print(";\n");
 			}
 			if (g.variables) {
-				print("VAR ".indentBy(iLvl));
-				foreach(v;g.variables) {
+				print("\n" ~ "VAR ".indentBy(iLvl));
+				foreach(v;g.variables[0 .. $-1]) {
 					print(v);
 					print(", ");
 				}
+				print(g.variables[$-1]);
 				print(";\n");
 			}
 			if (g.procedures) {
 				foreach(p;g.procedures) {
-					print("PROCEDURE ".indentBy(iLvl));
+					print("\n"~"PROCEDURE ".indentBy(iLvl));
 					print(p);
 				}
 			}
 		
 			print(g.statement);
+			--iLvl;
 		}
 
 
@@ -196,17 +201,17 @@ string print(const PLNode root) pure {
 			sink.put(" ");
 			sink.put("=");
 			sink.put(" ");
-			print(g.init);
+			print(g._init);
 		}
 
 
 		void print(VarDecl g) {
 			print(g.name);
-			sink.put(" ");
-			if (g.init) {
+			if (g._init) {
+				sink.put(" ");
 				sink.put("=");
 				sink.put(" ");
-				print(g.init);
+				print(g._init);
 			}
 		}
 
@@ -215,7 +220,7 @@ string print(const PLNode root) pure {
 			print(g.name);
 			sink.put(";");
 			print(g.block);
-			--iLvl;
+//			--iLvl;
 			sink.put(";\n".indentBy(iLvl));
 		}
 
@@ -230,20 +235,26 @@ string print(const PLNode root) pure {
 
 
 		void print(BeginEndStatement g) {
+			bool oldLastInBlock = lastInBlock;
 			sink.put("BEGIN");
 			iLvl++;
+			beginEndLevel++;
 			newlineAfterStatement = false;
 			foreach(_e;g.statements[0..$-1]) {
 				print(_e);
-				sink.put(";");
+				/*if (!cast(BeginEndStatement)_e)*/ sink.put(";");
 			}
 
 			if (g.statements.length >= 1) {
-				print(g.statements[$-1]);
-				sink.put("\n");
-			}
-			newlineAfterStatement = true;
+					lastInBlock = true;
+					print(g.statements[$-1]);
+					lastInBlock = oldLastInBlock;
+					sink.put("\n");
+				}
+
 			iLvl--;
+			beginEndLevel--;
+			newlineAfterStatement = !beginEndLevel;
 			sink.put("END".indentBy(iLvl));
 		}
 
