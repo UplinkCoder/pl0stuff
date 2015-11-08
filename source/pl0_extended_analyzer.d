@@ -1,6 +1,4 @@
 import pl0_extended_ast;
-import pl0_extended_ast;
-
 
 struct Analyzer {
 
@@ -22,11 +20,6 @@ struct Analyzer {
 	static struct _Error {
 		string reason;
 		MyLocation loc;
-
-		string toString(string source)  shared {
-			import std.format;
-			return format("!Error! in line %d: %s\n %s", loc.line, reason, source[loc.absPos .. loc.absPos + loc.length]); 
-		}
 	}
 
 
@@ -34,7 +27,8 @@ struct Analyzer {
 	import std.algorithm;
 	bool symbolTableFilled = false;
 	bool allNodesFilled = false;
-	
+
+	uint stateSyncId;
 	Programm programm;
 	NodeWithParentBlock*[] allNodes;
 	Block[Block] parentMap;
@@ -117,6 +111,7 @@ struct Analyzer {
 
 	void fillSymbolTable() {
 		stable = typeof(stable).init;
+		stable.running_id = 0;
 		foreach(b;getAllNodes()
 			.map!(n => cast(Block)n.node)
 			.filter!(b => b !is null && (!!b.variables.length || !!b.constants.length || !!b.procedures.length))) {
@@ -172,19 +167,60 @@ struct Analyzer {
 				break;
 				case _ProDecl :
 					auto findSplitResult = findSplit(b.procedures, [s.p]);
-				debug {import std.stdio;writeln(findSplitResult);}
 				b.procedures = findSplitResult[0] ~ findSplitResult[2];
 				break;
 		}
 	}
 
-	Block getParentBlock(nwp* n) {
-		nwp *parentBlock = (n);
+	alias getParentBlock = getParent!(Block);
+
+	static nwp* getParentWithParent(T)(nwp *n) {
+		nwp *parent = n;
 	findParent :
-		while(!cast(Block) parentBlock.node) {
-			parentBlock = parentBlock.parent;
+		while(!cast(T) parent.node && parent.parent !is null) {
+			parent = parent.parent;
 		}
-		return cast (Block) parentBlock.node;
+		return parent;
+	}
+
+	static T getParent(T)(nwp* n) {
+		auto p = getParentWithParent!(T)(n);
+		return cast (T) p.node;
+	}
+
+	nwp* getNearest(T)(nwp* node, nwp*[] canidates) if(is(T:PLNode)) {
+		nwp* currentClosestCanidate = null;
+		if (auto bes = cast(BeginEndStatement) node.parent.node) {
+			foreach(stmt;bes.statements) {
+				if (stmt is node.node) {
+					break;
+				} else {
+					foreach(c;canidates.filter!(n => n.parent.node is bes && !!cast(T)n.node)) {
+						currentClosestCanidate = c;
+					}
+				}
+			}
+		} else if (auto bl = cast (Block) node.parent.node) {
+			foreach(c;canidates.filter!(n => n.parent.node is bl && !!cast(T)n.node)) {
+				currentClosestCanidate = c;
+			}
+		} else if (auto p = cast(Programm) node.parent.node) {
+			return null;
+		} else if (auto nd = cast(PLNode) node.parent.node) {
+			foreach(c;canidates.filter!(n => n.parent.node is nd && !!cast(T)n.node)) {
+				currentClosestCanidate = c;
+			}
+		} else {
+			assert(0, "Unexpected Type" ~ typeid(node.parent.node).toString);
+		}
+
+		if (currentClosestCanidate !is null) {
+			return currentClosestCanidate;
+		} else if (node.parent !is null) {
+			return getNearest!T(node.parent, canidates);
+		} else {
+			return null;
+		}
 	}
 
 	Symbol* getNearestSymbol(Block b, Identifier i) {
@@ -197,8 +233,6 @@ struct Analyzer {
 				return &s[0];
 			} else {
 				//assert(0, "Symbol '" ~ i.identifier ~ "' could not be resolved unamigouisly");
-				import std.stdio;
-				writeln(s);
 			}
 		}
 
@@ -227,59 +261,6 @@ struct Analyzer {
 		}
 
 		return null;
-	}
-
-	
-	//	Block getNearestBlock(Block bl, Block[] blocks) {
-	//		Block nearestBlock;
-	//		uint nearestLevel = uint.max;
-	//		foreach(b;blocks) {
-	//			if (b is bl) {
-	//				return b;
-	//			} else {
-	//				uint nearnessLevel = getNearnessLevel(bl, b);
-	//				if (nearnessLevel < nearestLevel) {
-	//					nearestBlock = b;
-	//					nearestLevel = nearnessLevel;
-	//				}
-	//			}
-	//		}
-	//
-	//		assert(nearestBlock, "if this happens you screwed up my friend");
-	//		return nearestBlock;
-	//	}
-	//
-	//	uint getNearnessLevel(Block b1, Block b2) {
-	//
-	//	}
-	
-	string genDot() {
-		import std.conv:to;
-		uint runningBlockNumber;
-		string result = "digraph {\n\tProgramm -> ";
-		Block[] parents;
-		Block currentBlock = programm.block;
-		
-	procedure_search : foreach(pd;currentBlock.procedures) {
-			parents ~= currentBlock;
-			currentBlock = pd.block;
-			runningBlockNumber++;
-			
-			result ~= "procedure_" ~ pd.name.identifier ~ "\n\t";
-			
-			if (pd.block.procedures) {
-				parents ~= currentBlock;
-				currentBlock = pd.block;
-				result ~= "procedure_" ~ pd.name.identifier ~ " -> ";
-			} else if (parents[$-1] is programm.block) {
-				result ~= "Programm -> ";
-			}
-		}
-		
-		result ~= "}";
-		
-		return result;
-		
 	}
 	
 	uint countBlocks() {
@@ -348,9 +329,15 @@ struct Analyzer {
 		nwp*[] getAllNodes(Statement s, nwp* p) {
 			if (auto a = cast(AssignmentStatement)s) {
 				auto ap = new nwp(a, p);
-				return ([ap, new nwp(new PrimaryExpression(false, null, a.name, null), ap)] ~ getAllNodes(a.expr, ap));
+				auto pe = new PrimaryExpression(false, null, a.name, null);
+				pe.loc = a.name.loc;
+
+				return ([ap, new nwp(pe, ap)] ~ getAllNodes(a.expr, ap));
 			} else if (auto c = cast(CallStatement)s) {
-				return [new nwp(c, p)];
+				auto cp = new nwp(c, p);
+				auto pe = new PrimaryExpression(false, null, c.name, null);
+				pe.loc = c.name.loc;
+				return [cp, new nwp(pe, cp)];
 			} else if (auto b = cast(BeginEndStatement)s) {
 				auto bp = new nwp(b, p);
 				auto result = [bp];
@@ -402,19 +389,5 @@ struct Analyzer {
 			} else assert(0, "We should never get here!");
 		}
 	}
-	//	uint nestingLevel (Block b) {
-	//		uint level = 0;
-	//		Block _b = programm.block;
-	//		if (b == _b) {
-	//			return level;
-	//		} else {
-	//			level++;
-	//			foreach(p;_b.procedures) {
-	//
-	//			}
-	//		}
-	//	}
 	
 }
-
-pure :

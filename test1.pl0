@@ -1,4 +1,6 @@
-CONST  m =  7,
-  n = 85;
+CONST  m =  7,  n = 85;
   PROCEDURE add;
-	CALL x;
+	CALL x
+  ;
+  CALL add
+  .

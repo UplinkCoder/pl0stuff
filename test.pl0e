@@ -1,5 +1,5 @@
 CONST one = 1;
-VAR x, squ;
+VAR x, squ, y;
 PROCEDURE superflous;
  squ := squ
 ;
@@ -11,7 +11,8 @@ END;
 
 BEGIN
 	BEGIN 
-		  x := one
+		x := one;
+		CALL superflous
 	END;
 
    WHILE x <= 10 DO

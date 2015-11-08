@@ -54,8 +54,8 @@ void eliminateVariableAssignments(Analyzer* a) {
 					continue;
 				}
 				//writeln(as.print);
-				replaceExpr(a, pe_node, as.expr);
-				removeStmt(a, as_node);
+			//	replaceExpr(a, pe_node, as.expr);
+			//	removeStmt(a, as_node);
 			}
 		} else {
 			continue;

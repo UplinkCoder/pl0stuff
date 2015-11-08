@@ -18,12 +18,31 @@ END
 .`;
 
 static immutable test0_extended =
-	`CONST n = 7, m = 85;
-VAR x,y,z,q,r;
-BEGIN
-! n;
-CALL end
-END
+`        CONST one = 1;
+        VAR x , squ , y ;
+        PROCEDURE superflous;
+                squ := squ
+        ;
+        PROCEDURE square;
+                BEGIN
+                        squ := x * x
+                END
+        ;
+
+        BEGIN
+                BEGIN
+                        x := one;
+                        CALL superflous
+                END;
+                WHILE x <= 10 DO
+                BEGIN
+                        CALL square;
+                        ! squ;
+                        x := x + one
+                END
+        END
+
+.
 .`;
 
 static immutable test1_extended =
@@ -95,7 +114,7 @@ BEGIN
     IF g < f THEN f := f - g
   END;
   z := f;
-  ! z;
+  ! z
 END;
 
 BEGIN
