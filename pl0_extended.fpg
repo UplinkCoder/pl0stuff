@@ -1,6 +1,6 @@
 PLNode {
 	Identifier @internal {
-		[a-z][] identifier
+		[_a-z][] identifier
 	}
 
 	Number @internal {
@@ -32,7 +32,7 @@ PLNode {
 		}
 
 		ProDecl @internal {
-			Identifier name, ";",? "ARG" : (VarDecl[] arguments : ",", ";"), Block block, ";"
+			Identifier name, ";",? "ARG" : bool isFunction, ? bool isFunction : (VarDecl[] arguments : ",", ";"), Block block, ";"
 		}
 	}
 	

@@ -22,10 +22,24 @@ void replaceStmt (Analyzer* a, Analyzer.nwp* dst, Statement src) {
 	a.allNodes = a.getAllNodes();
 }
 
+T[] ctReplace(T,U)(ref T[] arr, U element, T[] replacement) {
+	static assert(is(U == T) || is(U : T[]));
+	uint pos;
+//	T[] result;
+	while (arr[++pos] !is element) {
+		if (pos < arr.length) {
+			return arr;
+		}
+	}
+	
+	arr[pos] = element;
+}
+
 void replaceStmts (Analyzer* a, Analyzer.nwp* dst, Statement[] src) {
 	if (auto bes = cast (BeginEndStatement)dst.parent.node) {
-		auto fspr = findSplit(bes.statements, [dst.node]);
+		auto fspr = findSplit!((a,b) => a is b)(bes.statements, [dst.node]);
 		bes.statements = fspr[0] ~ src ~ fspr[2];
+		//bes.statements = ctReplace(bes.statements, dst.node, src);
 	} else {
 		debug {import std.stdio; writeln(typeid(dst.parent.node));}
 	}

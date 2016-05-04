@@ -11,13 +11,11 @@ import std.algorithm;
 import std.range;
 import std.array;
 import ast_modifier;
-
+//pure :
 /** run this at the last possible moment */
 void eliminateVariableAssignments(Analyzer* a) {
 	static OptimizerState state;
 	
-	//	if (a.stateSyncId != state.stateSyncId) {
-	state = state.init;
 	foreach (as_node;a.allNodes.filter!(n => cast(AssignmentStatement)n.node)) {
 		auto as = cast(AssignmentStatement*)&as_node.node;
 		if (auto pe = cast(PrimaryExpression) (as.expr)) {

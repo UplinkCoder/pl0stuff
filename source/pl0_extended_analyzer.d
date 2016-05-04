@@ -1,7 +1,7 @@
 import pl0_extended_ast;
 
 struct Analyzer {
-
+//pure :
 	struct NodeWithParentBlock {
 		PLNode node;
 		NodeWithParentBlock *parent;
@@ -37,7 +37,8 @@ struct Analyzer {
 
 
 	struct SymbolTable {
-		static running_id = 0;
+//	pure :
+		int running_id = 0;
 		static struct Symbol {
 			uint id;
 			Block definedIn;
@@ -56,19 +57,19 @@ struct Analyzer {
 			
 			SymbolType type;
 			
-			this(VarDecl v, Block definedIn) {
+			this(VarDecl v, Block definedIn) pure {
 				this.v = v;
 				this.definedIn = definedIn;
 				this.type = SymbolType._VarDecl;
 			}
 			
-			this(ConstDecl c, Block definedIn) {
+			this(ConstDecl c, Block definedIn) pure {
 				this.c = c;
 				this.definedIn = definedIn;
 				this.type = SymbolType._ConstDecl;
 			}
 			
-			this(ProDecl p, Block definedIn) {
+			this(ProDecl p, Block definedIn) pure {
 				this.p = p;
 				this.definedIn = definedIn;
 				this.type = SymbolType._ProDecl;
@@ -158,15 +159,15 @@ struct Analyzer {
 		import std.array;
 			final switch(s.type) with (Symbol.SymbolType) {
 				case _VarDecl :
-				auto findSplitResult = findSplit(b.variables, [s.v]);
+				auto findSplitResult = findSplit!((a,b) => a is b)(b.variables, [s.v]);
 				b.variables = findSplitResult[0] ~ findSplitResult[2];
 				break;
 				case _ConstDecl :
-				auto findSplitResult = findSplit(b.constants, [s.c]);
+				auto findSplitResult = findSplit!((a,b) => a is b)(b.constants, [s.c]);
 				b.constants = findSplitResult[0] ~ findSplitResult[2];
 				break;
 				case _ProDecl :
-					auto findSplitResult = findSplit(b.procedures, [s.p]);
+					auto findSplitResult = findSplit!((a,b) => a is b)(b.procedures, [s.p]);
 				b.procedures = findSplitResult[0] ~ findSplitResult[2];
 				break;
 		}
@@ -227,7 +228,7 @@ struct Analyzer {
 		auto syms = stable.symbolsByBlock.get(b, null);
 		if (syms !is null) {
 			import std.algorithm;
-			auto s = find!(s => s.getSymbolName == i.identifier)(syms);
+			auto s = find!(s => s.getSymbolName is i.identifier)(syms);
 			if (s.length >= 1) {
 				s[0].isReferenced = true;
 				return &s[0];

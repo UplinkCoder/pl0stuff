@@ -42,10 +42,16 @@ final class Literal : PLNode {
 
 final class Programm : PLNode {
 	Block block;
+	//string programmName = null;
 
 	this(Block block) pure {
 		this.block = block;
 	}
+	
+	/*this(Block block, string programmName) pure {
+		this.block = block;
+		this.programmName = programmName;
+	}*/
 }
 
 final class Block : PLNode {

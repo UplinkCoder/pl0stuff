@@ -22,11 +22,34 @@ static const extended_test_0 = test0_extended.lex.parse;
 static const extended_test_1 = test1_extended.lex.parse;
 static const extended_test_2 = test2_extended.lex.parse;
 
-pragma(msg, static_parsed);
+//pragma(msg, static_parsed.genCode);
 
-pragma(msg, extended_test_1);
+//pragma(msg, extended_test_1);
+pragma(msg, test1_extended);
+pragma(msg, extended_test_1.genCode(true));
 
+mixin(q{
+CONST one = 1;
+VAR x, squ;
+PROCEDURE superflous;
+ squ := squ
+;
 
+PROCEDURE square;
+BEGIN
+   squ:= x * x
+END;
+
+BEGIN
+   WHILE x <= 10 DO
+   BEGIN
+      CALL square;
+      ! squ;
+      x := x + one
+   END
+END.
+}.lex.parse.genCode(false, TargetLanguage.D)
+);
 
 
 void main(string[] args) {
@@ -160,6 +183,6 @@ void main(string[] args) {
 	} else {
 		writeln ("invoke like : ", args[0], " file.pl0 \n");
 	}
-	
+	plMain();
 	
 }
