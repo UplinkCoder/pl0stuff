@@ -31,7 +31,7 @@ string footer(alias T)() if (is(T : PLNode) || is(typeof(T):PLNode)) {
 	}
 	immutable string footer = `
 		version (Location) {
-			auto lastToken = peekToken(1);
+			auto lastToken = peekToken(-1);
 			loc.length = lastToken.pos -  firstToken.pos + lastToken.length;
 			` ~ r ~ `
 		} else {
