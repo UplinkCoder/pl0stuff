@@ -246,11 +246,11 @@ string print(const PLNode root) pure {
 			}
 
 			if (g.statements.length >= 1) {
-					lastInBlock = true;
-					print(g.statements[$-1]);
-					lastInBlock = oldLastInBlock;
-					sink.put("\n");
-				}
+				lastInBlock = true;
+				print(g.statements[$-1]);
+				lastInBlock = oldLastInBlock;
+				sink.put("\n");
+			}
 
 			iLvl--;
 			beginEndLevel--;

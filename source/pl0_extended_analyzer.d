@@ -112,7 +112,6 @@ struct Analyzer {
 
 	void fillSymbolTable() {
 		stable = typeof(stable).init;
-		stable.running_id = 0;
 		foreach(b;getAllNodes()
 			.map!(n => cast(Block)n.node)
 			.filter!(b => b !is null && (!!b.variables.length || !!b.constants.length || !!b.procedures.length))) {
@@ -186,7 +185,7 @@ struct Analyzer {
 
 	static T getParent(T)(nwp* n) {
 		auto p = getParentWithParent!(T)(n);
-		return cast (T) p.node;
+		return cast(T) p.node;
 	}
 
 	nwp* getNearest(T)(nwp* node, nwp*[] canidates) if(is(T:PLNode)) {
@@ -228,7 +227,7 @@ struct Analyzer {
 		auto syms = stable.symbolsByBlock.get(b, null);
 		if (syms !is null) {
 			import std.algorithm;
-			auto s = find!(s => s.getSymbolName is i.identifier)(syms);
+			auto s = find!(s => s.getSymbolName == i.identifier)(syms);
 			if (s.length >= 1) {
 				s[0].isReferenced = true;
 				return &s[0];
@@ -293,9 +292,10 @@ struct Analyzer {
 		}
 		return allNodes;
 		} else {
-			return  getAllNodes(programm.block, new nwp(programm, null));
+			return getAllNodes(programm.block, new nwp(programm, null));
 		}
 	}
+	
 	static pure {
 
 		nwp*[] getAllNodes(Block b, nwp* p) {
@@ -379,9 +379,7 @@ struct Analyzer {
 				auto pp = new nwp(pe, p);
 				return pp ~ getAllNodes(pe.expr, pp);
 			} else if(auto pr = cast(PrimaryExpression) e) {
-				if (pr.identifier) {
-					return [new nwp(pr,p)];
-				} else if (pr.literal) {
+				if (pr.identifier !is null || pr.literal !is null) {
 					return [new nwp(pr,p)];
 				} else if (pr.paren) {
 					auto pp = new nwp(pr,p);

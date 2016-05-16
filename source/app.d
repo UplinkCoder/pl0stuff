@@ -26,7 +26,7 @@ static const extended_test_2 = test2_extended.lex.parse;
 
 //pragma(msg, extended_test_1);
 pragma(msg, test1_extended);
-pragma(msg, extended_test_1.genCode(true));
+pragma(msg, extended_test_1.genCode(false, TargetLanguage.D));
 
 mixin(q{
 CONST one = 1;
@@ -44,7 +44,7 @@ BEGIN
    WHILE x <= 10 DO
    BEGIN
       CALL square;
-      ! squ;
+      IF ODD x THEN ! squ;
       x := x + one
    END
 END.
@@ -76,7 +76,7 @@ void main(string[] args) {
 		"format", &format,
 		//Arguments second
 		"o|output-file", &outputFile,
-		);
+	);
 
 	if (args.length == 2) {
 		auto source = readText(args[1]);

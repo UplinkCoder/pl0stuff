@@ -1,5 +1,5 @@
 CONST one = 1;
-VAR x, squ, y;
+VAR x, squ;
 PROCEDURE superflous;
  squ := squ
 ;
