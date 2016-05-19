@@ -25,25 +25,28 @@ void replaceStmt (Analyzer* a, Analyzer.nwp* dst, Statement src) pure {
 void ctReplace(T,U)(ref T[] arr, U element, T[] replacement) {
 	static assert(is(T : U) || is(U : T[]));
 	uint pos;
-	
 	while (arr[pos++] !is element) {
-		if (pos <= arr.length) {
+		if (pos >= arr.length) {
 			return ;
 		}
 	}
 
-	arr = arr[0 .. pos] ~ replacement ~ arr[pos+1 .. $]; 
-	
+	arr = (arr[0 .. pos-1] ~ replacement ~ arr[pos .. $]);
 }
+
 
 void replaceStmts (Analyzer* a, Analyzer.nwp* dst, Statement[] src) pure {
 	if (auto bes = cast (BeginEndStatement)dst.parent.node) {
 		//auto fspr = findSplit!((a,b) => a is b)(bes.statements, [dst.node]);
 		//bes.statements = fspr[0] ~ src ~ fspr[2];
 		ctReplace(bes.statements, dst.node, src);
-	} else {
-		debug {import std.stdio; writeln(typeid(dst.parent.node));}
-	}
+	} else if (auto bl = cast (Block)dst.parent.node) {
+		if (src.length) {
+			bl.statement = src.length > 1 ? new BeginEndStatement(src) : src[0];
+		}
+	}	
+		//debug {import std.stdio; writeln(typeid(dst.parent.node));}
+
 	a.allNodesFilled = false;
 	a.allNodes = a.getAllNodes();
 }
