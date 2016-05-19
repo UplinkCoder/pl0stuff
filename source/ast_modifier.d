@@ -2,10 +2,10 @@
 import pl0_extended_analyzer;
 import std.algorithm;
 
-void removeStmt(Analyzer* a, Analyzer.nwp* stmt) {
+void removeStmt(Analyzer* a, Analyzer.nwp* stmt) pure {
 	replaceStmts(a, stmt, []);
 }
-void replaceStmt (Analyzer* a, Analyzer.nwp* dst, Statement src) {
+void replaceStmt (Analyzer* a, Analyzer.nwp* dst, Statement src) pure {
 	if (auto bes = cast (BeginEndStatement)dst.parent.node) {
 		foreach(ref stmt;bes.statements) {
 			if (stmt is (*dst).node) {
@@ -22,24 +22,25 @@ void replaceStmt (Analyzer* a, Analyzer.nwp* dst, Statement src) {
 	a.allNodes = a.getAllNodes();
 }
 
-T[] ctReplace(T,U)(ref T[] arr, U element, T[] replacement) {
-	static assert(is(U == T) || is(U : T[]));
+void ctReplace(T,U)(ref T[] arr, U element, T[] replacement) {
+	static assert(is(T : U) || is(U : T[]));
 	uint pos;
-//	T[] result;
-	while (arr[++pos] !is element) {
-		if (pos < arr.length) {
-			return arr;
+	
+	while (arr[pos++] !is element) {
+		if (pos <= arr.length) {
+			return ;
 		}
 	}
+
+	arr = arr[0 .. pos] ~ replacement ~ arr[pos+1 .. $]; 
 	
-	arr[pos] = element;
 }
 
-void replaceStmts (Analyzer* a, Analyzer.nwp* dst, Statement[] src) {
+void replaceStmts (Analyzer* a, Analyzer.nwp* dst, Statement[] src) pure {
 	if (auto bes = cast (BeginEndStatement)dst.parent.node) {
-		auto fspr = findSplit!((a,b) => a is b)(bes.statements, [dst.node]);
-		bes.statements = fspr[0] ~ src ~ fspr[2];
-		//bes.statements = ctReplace(bes.statements, dst.node, src);
+		//auto fspr = findSplit!((a,b) => a is b)(bes.statements, [dst.node]);
+		//bes.statements = fspr[0] ~ src ~ fspr[2];
+		ctReplace(bes.statements, dst.node, src);
 	} else {
 		debug {import std.stdio; writeln(typeid(dst.parent.node));}
 	}
@@ -47,7 +48,7 @@ void replaceStmts (Analyzer* a, Analyzer.nwp* dst, Statement[] src) {
 	a.allNodes = a.getAllNodes();
 }
 
-void replaceExpr (Analyzer* a, Analyzer.nwp* dst, Expression src) {
+void replaceExpr (Analyzer* a, Analyzer.nwp* dst, Expression src) pure {
 	if (auto ae = cast (AddExprssion)dst.parent.node) {
 		if (ae.lhs is dst.node) {
 			ae.lhs = src;

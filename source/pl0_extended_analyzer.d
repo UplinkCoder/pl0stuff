@@ -24,7 +24,8 @@ struct Analyzer {
 
 
 	alias nwp = NodeWithParentBlock; 
-	import std.algorithm;
+	import std.algorithm : map, filter;
+	import optimizer : findSplit;
 	bool symbolTableFilled = false;
 	bool allNodesFilled = false;
 
@@ -32,9 +33,8 @@ struct Analyzer {
 	Programm programm;
 	NodeWithParentBlock*[] allNodes;
 	Block[Block] parentMap;
+	Condition[] condStack;
 	shared _Error[] errors;
-
-
 
 	struct SymbolTable {
 //	pure :
@@ -75,7 +75,7 @@ struct Analyzer {
 				this.type = SymbolType._ProDecl;
 			}
 			
-			const (char)[] getSymbolName() {
+			const (char)[] getSymbolName() pure {
 				final switch(type) with (Symbol.SymbolType) {
 					case _VarDecl :
 						return cast(const (char)[]) v.name.identifier;
@@ -88,7 +88,7 @@ struct Analyzer {
 			}
 		}
 
-		void addSymbol(Symbol s) {
+		void addSymbol(Symbol s) pure {
 			s.id = running_id++;
 			
 			symbolsByName[s.getSymbolName()] ~= s;
@@ -110,7 +110,7 @@ struct Analyzer {
 	SymbolTable stable; 
 	alias Symbol = SymbolTable.Symbol;
 
-	void fillSymbolTable() {
+	void fillSymbolTable() pure {
 		stable = typeof(stable).init;
 		foreach(b;getAllNodes()
 			.map!(n => cast(Block)n.node)
@@ -131,7 +131,7 @@ struct Analyzer {
 		}
 	}
 
-	void fillParentMap() {
+	void fillParentMap() pure {
 		void fillParentMap(Block child, Block parent) {
 			parentMap[child] = parent;
 			foreach(p; child.procedures) {
@@ -142,8 +142,8 @@ struct Analyzer {
 		fillParentMap(programm.block, null);
 	}
 	
-	this(Programm programm, bool skip_analysis = false) {
-		this.programm = programm;
+	this(const Programm programm, bool skip_analysis = false) pure {
+		this.programm = cast(Programm) programm;
 		if (!skip_analysis) {
 			fillSymbolTable();
 			fillParentMap();
@@ -153,7 +153,7 @@ struct Analyzer {
 		}
 	}
 
-	void removeSymbol(Symbol s) {
+	void removeSymbol(Symbol s) pure {
 		Block b = s.definedIn;
 		import std.array;
 			final switch(s.type) with (Symbol.SymbolType) {
@@ -188,7 +188,7 @@ struct Analyzer {
 		return cast(T) p.node;
 	}
 
-	nwp* getNearest(T)(nwp* node, nwp*[] canidates) if(is(T:PLNode)) {
+	nwp* getNearest(T, bool controlflowsensitive = true)(nwp* node, nwp*[] canidates) if(is(T:PLNode)) {
 		nwp* currentClosestCanidate = null;
 		if (auto bes = cast(BeginEndStatement) node.parent.node) {
 			foreach(stmt;bes.statements) {
@@ -205,6 +205,8 @@ struct Analyzer {
 				currentClosestCanidate = c;
 			}
 		} else if (auto p = cast(Programm) node.parent.node) {
+			return null;
+		} else if (controlflowsensitive && (!!cast(IfStatement) node.parent.node && !!cast(WhileStatement) node.parent.node)) {
 			return null;
 		} else if (auto nd = cast(PLNode) node.parent.node) {
 			foreach(c;canidates.filter!(n => n.parent.node is nd && !!cast(T)n.node)) {
@@ -223,10 +225,10 @@ struct Analyzer {
 		}
 	}
 
-	Symbol* getNearestSymbol(Block b, Identifier i) {
+	Symbol* getNearestSymbol(Block b, Identifier i) pure {
 		auto syms = stable.symbolsByBlock.get(b, null);
 		if (syms !is null) {
-			import std.algorithm;
+			import std.algorithm : find;
 			auto s = find!(s => s.getSymbolName == i.identifier)(syms);
 			if (s.length >= 1) {
 				s[0].isReferenced = true;

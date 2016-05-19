@@ -26,7 +26,7 @@ static const extended_test_2 = test2_extended.lex.parse;
 
 //pragma(msg, extended_test_1);
 pragma(msg, test1_extended);
-pragma(msg, extended_test_1.genCode(false, TargetLanguage.D));
+pragma(msg, extended_test_1.optimize.genCode(false, TargetLanguage.D));
 
 mixin(q{
 CONST one = 1;
