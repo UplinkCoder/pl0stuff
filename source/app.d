@@ -26,7 +26,7 @@ static const extended_test_2 = test2_extended.lex.parse;
 
 //pragma(msg, extended_test_1);
 pragma(msg, test1_extended);
-pragma(msg, extended_test_1.optimize.genCode(false, TargetLanguage.D));
+//pragma(msg, extended_test_1.optimize.genCode(false, TargetLanguage.D));
 
 mixin(q{
 CONST one = 1;
@@ -43,12 +43,13 @@ END;
 BEGIN
    WHILE x <= 10 DO
    BEGIN
+	  CALL superflous; 
       CALL square;
       IF ODD x THEN ! squ;
       x := x + one
    END
 END.
-}.lex.parse.genCode(false, TargetLanguage.D)
+}.lex.parse.optimize.genCode(false, TargetLanguage.D)
 );
 
 
@@ -118,7 +119,7 @@ void main(string[] args) {
 			if (_debug) writeln("After ConstRewrite", analyzer.programm.print);
 
 			reduceBeginEnd(&analyzer);
-			if (_debug) writeln("After BeginEndReduce", analyzer.programm.print);
+			if (_debug) writeln("After BeginEndReduce (1)", analyzer.programm.print);
 
 			removeUnreferancedSymbols(&analyzer);
 			if (_debug) writeln("After Removeing unreferenced Symbols (1)", analyzer.programm.print);
@@ -130,7 +131,7 @@ void main(string[] args) {
 			if (_debug) writeln("After Removeing unreferenced Symbols (2)", analyzer.programm.print);
 
 			reduceBeginEnd(&analyzer);
-			if (_debug) writeln("After BeginEndReduce", analyzer.programm.print);
+			if (_debug) writeln("After BeginEndReduce (2)", analyzer.programm.print);
 		}
 
 
@@ -184,5 +185,30 @@ void main(string[] args) {
 		writeln ("invoke like : ", args[0], " file.pl0 \n");
 	}
 	plMain();
+
+	q{
+		CONST one = 1;
+		VAR x, squ;
+		PROCEDURE superflous;
+	squ := squ
+			;
+		
+		PROCEDURE square;
+		BEGIN
+			squ:= x * x;
+			CALL superflous
+		END;
+		
+		BEGIN
+			WHILE x <= 10 DO
+				BEGIN
+				CALL square;
+		IF ODD x THEN ! squ;
+	x := x + one
+		END
+				END.
+	}.lex.parse.optimize.genCode.writeln;
+
+
 	
 }

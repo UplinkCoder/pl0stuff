@@ -33,7 +33,7 @@ struct Analyzer {
 	Programm programm;
 	NodeWithParentBlock*[] allNodes;
 	Block[Block] parentMap;
-	Condition[] condStack;
+
 	shared _Error[] errors;
 
 	struct SymbolTable {
@@ -57,19 +57,19 @@ struct Analyzer {
 			
 			SymbolType type;
 			
-			this(VarDecl v, Block definedIn) pure {
+			this(VarDecl v, ref Block definedIn) pure {
 				this.v = v;
 				this.definedIn = definedIn;
 				this.type = SymbolType._VarDecl;
 			}
 			
-			this(ConstDecl c, Block definedIn) pure {
+			this(ConstDecl c, ref Block definedIn) pure {
 				this.c = c;
 				this.definedIn = definedIn;
 				this.type = SymbolType._ConstDecl;
 			}
 			
-			this(ProDecl p, Block definedIn) pure {
+			this(ProDecl p, ref Block definedIn) pure {
 				this.p = p;
 				this.definedIn = definedIn;
 				this.type = SymbolType._ProDecl;
@@ -154,22 +154,53 @@ struct Analyzer {
 	}
 
 	void removeSymbol(Symbol s) pure {
-		Block b = s.definedIn;
-		import std.array;
-			final switch(s.type) with (Symbol.SymbolType) {
-				case _VarDecl :
-				auto findSplitResult = findSplit!((a,b) => a is b)(b.variables, [s.v]);
-				b.variables = findSplitResult[0] ~ findSplitResult[2];
-				break;
-				case _ConstDecl :
-				auto findSplitResult = findSplit!((a,b) => a is b)(b.constants, [s.c]);
-				b.constants = findSplitResult[0] ~ findSplitResult[2];
-				break;
-				case _ProDecl :
-					auto findSplitResult = findSplit!((a,b) => a is b)(b.procedures, [s.p]);
-				b.procedures = findSplitResult[0] ~ findSplitResult[2];
-				break;
+		static T[] rms(T) (T[] syms, T s) {
+			uint i;
+			if (syms is null) {
+				return null;
+			}
+			while(i <= syms.length) {
+				if (s is syms[i++]) {
+					return syms[0 .. i-1] ~ syms[i .. $];
+				}
+			}
+			assert(0, "Symbol could not be found");
 		}
+
+		auto p = parentMap[s.definedIn];
+		if (!p) {
+
+		}
+	//	Block b = getParentBlock(s.d);
+		final switch(s.type) with (Symbol.SymbolType) {
+			case _VarDecl :
+					s.definedIn = new Block(
+					s.definedIn.constants,
+					rms(s.definedIn.variables, s.v),
+					s.definedIn.procedures,
+					s.definedIn.statement
+				);
+			break;
+			case _ConstDecl :
+			s.definedIn = new Block(
+				rms(s.definedIn.constants, s.c),
+				s.definedIn.variables,
+				s.definedIn.procedures,
+				s.definedIn.statement
+			);
+
+			break;
+			case _ProDecl :
+			s.definedIn = new Block(
+				s.definedIn.constants,
+				s.definedIn.variables,
+				rms(s.definedIn.procedures, s.p),
+				s.definedIn.statement
+			);
+			break;
+		}
+		fillSymbolTable();
+
 	}
 
 	alias getParentBlock = getParent!(Block);

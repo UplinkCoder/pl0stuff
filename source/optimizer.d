@@ -153,7 +153,6 @@ uint[] getAllUsedSymbolIds(Analyzer* a) {
 
 
 Programm optimize(const Programm src) pure {
-	Programm result;
 	auto analyzer = Analyzer(src); 
 	rewriteConst(&analyzer);
 	inlineCall(&analyzer);
@@ -161,6 +160,7 @@ Programm optimize(const Programm src) pure {
 	removeUnreferancedSymbols(&analyzer);
 	eliminateVariableAssignments(&analyzer);
 	removeUnreferancedSymbols(&analyzer);
+	reduceBeginEnd(&analyzer);
 	
 	return analyzer.programm;
 }

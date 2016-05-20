@@ -240,21 +240,23 @@ string print(const PLNode root) pure {
 			iLvl++;
 			beginEndLevel++;
 			newlineAfterStatement = false;
-			foreach(_e;g.statements[0..$-1]) {
-				print(_e);
-				/*if (!cast(BeginEndStatement)_e)*/ sink.put(";");
-			}
+			if (g.statements) {
+				foreach(_e;g.statements[0..$-1]) {
+					print(_e);
+					/*if (!cast(BeginEndStatement)_e)*/ sink.put(";");
+				}
 
-			if (g.statements.length >= 1) {
-				lastInBlock = true;
-				print(g.statements[$-1]);
-				lastInBlock = oldLastInBlock;
-				sink.put("\n");
-			}
+				if (g.statements.length >= 1) {
+					lastInBlock = true;
+					print(g.statements[$-1]);
+					lastInBlock = oldLastInBlock;
+					sink.put("\n");
+				}
 
-			iLvl--;
-			beginEndLevel--;
-			newlineAfterStatement = !beginEndLevel;
+				iLvl--;
+				beginEndLevel--;
+				newlineAfterStatement = !beginEndLevel;
+			}
 			sink.put("END".indentBy(iLvl));
 		}
 
