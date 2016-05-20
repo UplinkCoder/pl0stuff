@@ -142,15 +142,14 @@ struct Analyzer {
 		fillParentMap(programm.block, null);
 	}
 	
-	this(const Programm programm, bool skip_analysis = false) pure {
+	this(const Programm programm) pure {
 		this.programm = cast(Programm) programm;
-		if (!skip_analysis) {
-			fillSymbolTable();
-			fillParentMap();
-			allNodes = getAllNodes();
-			symbolTableFilled = true;
-			allNodesFilled = true;
-		}
+
+		fillSymbolTable();
+		fillParentMap();
+		allNodes = getAllNodes();
+		symbolTableFilled = true;
+		allNodesFilled = true;
 	}
 
 	void removeSymbol(Symbol s) pure {
@@ -168,13 +167,18 @@ struct Analyzer {
 		}
 
 		auto p = parentMap[s.definedIn];
-		if (!p) {
-
+		Block* BlockPtr;
+		foreach(block;p.blocks) {
+			if (*block is s.definedIn) {
+				BlockPtr = block;
+				break;
+			}
 		}
+		//auto oldBlock = s.definedIn;
 	//	Block b = getParentBlock(s.d);
 		final switch(s.type) with (Symbol.SymbolType) {
 			case _VarDecl :
-					s.definedIn = new Block(
+			BlockPtr ? *BlockPtr : programm.block = new Block(
 					s.definedIn.constants,
 					rms(s.definedIn.variables, s.v),
 					s.definedIn.procedures,
@@ -182,7 +186,7 @@ struct Analyzer {
 				);
 			break;
 			case _ConstDecl :
-			s.definedIn = new Block(
+			BlockPtr ? *BlockPtr : programm.block = new Block(
 				rms(s.definedIn.constants, s.c),
 				s.definedIn.variables,
 				s.definedIn.procedures,
@@ -191,7 +195,7 @@ struct Analyzer {
 
 			break;
 			case _ProDecl :
-			s.definedIn = new Block(
+			BlockPtr ? *BlockPtr : programm.block = new Block(
 				s.definedIn.constants,
 				s.definedIn.variables,
 				rms(s.definedIn.procedures, s.p),
@@ -199,7 +203,13 @@ struct Analyzer {
 			);
 			break;
 		}
+		import std.array;
+	//	this.stable.symbolsByBlock[s.definedIn].replace([s],[]);
+		s.definedIn = BlockPtr ? *BlockPtr : programm.block;
+	//	this.stable.symbolsByName.remove(s.getSymbolName());
+
 		fillSymbolTable();
+		fillParentMap();
 
 	}
 
@@ -317,16 +327,10 @@ struct Analyzer {
 	}
 	
 	nwp*[] getAllNodes() pure {
-		static if  (true) { 
-		if (allNodesFilled) {
-			return allNodes;
-		} else {
+		if (!allNodesFilled) {
 			allNodes = getAllNodes(programm.block, new nwp(programm, null));
 		}
 		return allNodes;
-		} else {
-			return getAllNodes(programm.block, new nwp(programm, null));
-		}
 	}
 	
 	static pure {
@@ -422,4 +426,15 @@ struct Analyzer {
 		}
 	}
 	
+}
+
+
+
+Block*[] blocks(ref Block b) pure {
+	Block*[] _blocks;
+	if (b && b.procedures) foreach(ref p;b.procedures) {
+		_blocks ~= &p.block ~ p.block.blocks;
+	}
+
+	return _blocks;
 }

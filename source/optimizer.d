@@ -113,10 +113,10 @@ void removeUnreferancedSymbols(Analyzer *a) {
 	
 	if (UsedSymbolIds.length != a.stable.symbolById.length) {
 		foreach(id; 0 .. cast (uint) a.stable.symbolById.length) {
-			if (!UsedSymbolIds.length || id != UsedSymbolIds[0]) {
+			if ((!UsedSymbolIds.length || id != UsedSymbolIds[0]) && id in a.stable.symbolById) {
 				a.removeSymbol(a.stable.symbolById[id]);
 			} else {
-				UsedSymbolIds = UsedSymbolIds [1 .. $];
+				if (UsedSymbolIds.length) UsedSymbolIds = UsedSymbolIds [1 .. $];
 			}
 		}
 		a.allNodesFilled = false;
