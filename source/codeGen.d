@@ -20,7 +20,7 @@ enum TargetLanguage {
 	D
 }
 
-string genCode(const Programm p, const bool omitMain = false, const TargetLanguage targetLanguage = TargetLanguage.C) pure {
+string genCode(const Programm p, const TargetLanguage targetLanguage = TargetLanguage.C, const bool omitMain = false) pure {
 	
 	struct CodeGen {	
 	pure :

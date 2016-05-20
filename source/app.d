@@ -49,7 +49,7 @@ BEGIN
       x := x + one
    END
 END.
-}.lex.parse.optimize.genCode(false, TargetLanguage.D)
+}.lex.parse.optimize.genCode(TargetLanguage.D)
 );
 
 
@@ -182,32 +182,37 @@ void main(string[] args) {
 			cf.writeln(analyzer.programm.genCode());
 		}
 	} else {
-		writeln ("invoke like : ", args[0], " file.pl0 \n");
+//		writeln ("invoke like : ", args[0], " file.pl0 \n");
 	}
-	plMain();
+//	plMain();
 
 	q{
 		CONST one = 1;
+		
 		VAR x, squ;
+		
 		PROCEDURE superflous;
-	squ := squ
-			;
+			squ := squ
+		;
 		
 		PROCEDURE square;
 		BEGIN
-			squ:= x * x;
+			squ := x * x;
 			CALL superflous
 		END;
 		
 		BEGIN
-			WHILE x <= 10 DO
+			WHILE x <= 10 DO 
+			BEGIN
+				IF ODD x THEN 
 				BEGIN
-				CALL square;
-		IF ODD x THEN ! squ;
-	x := x + one
-		END
-				END.
-	}.lex.parse.optimize.genCode.writeln;
+					CALL square;
+					! squ
+				END;
+				x := x + one
+			END
+		END.
+	}.lex.parse.optimize.print;//genCode(TargetLanguage.C).writeln;
 
 
 	
