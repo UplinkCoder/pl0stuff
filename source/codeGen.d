@@ -7,7 +7,7 @@ import ast_modifier;
 
 const(char)[] indentBy(const char[] str, const int indentLevel) pure {
 	char[] indent;
-	indent.reserve(str.length + indentLevel);
+	if (!__ctfe)indent.reserve(str.length + indentLevel);
 	foreach(t;0..indentLevel) {
 		indent ~= "\t";
 	}
@@ -15,7 +15,12 @@ const(char)[] indentBy(const char[] str, const int indentLevel) pure {
 }
 
 
-string genCode(Programm p) {
+enum TargetLanguage {
+	C,
+	D
+}
+
+string genCode(const Programm p, const TargetLanguage targetLanguage = TargetLanguage.C, const bool omitMain = false) pure {
 	
 	struct CodeGen {	
 	pure :
@@ -23,44 +28,57 @@ string genCode(Programm p) {
 		//const (char)[] output;
 		uint iLvl;
 		
-		void genCode(Programm p) {
+		void genCode(const Programm _p) {
 			output ~= "/*************************/\n";
 			output ~= "/***** Uplink Coders *****/\n";
 			output ~= "/******* PL/0 to C *******/\n";
 			output ~= "/******* Compiler ********/\n";
 			output ~= "/*************************/\n";
 			
-			output ~= "#include <stdio.h> // for printf\n\n";
+			if (targetLanguage == TargetLanguage.C) 
+				output ~= "#include <stdio.h> // for printf\n\n";
+			if (targetLanguage == TargetLanguage.D)
+				output ~= "\nimport core.stdc.stdio : printf;\n\n";
 			if (p.block.variables || p.block.constants) {
 				output ~= "/*************************/\n";
 				output ~= "/******* Globals *********/\n";
 				output ~= "/*************************/\n";
-				
+			 
 				genCode(p.block.constants);
 				genCode(p.block.variables);
-				p.block.constants = [];
-				p.block.variables = [];
+			
+				//p.block.constants = [];
+				//p.block.variables = [];
 			}
 			if (p.block.procedures) {
-				genCode(p.block.procedures);
-				
 				output ~= "/*************************/\n";
 				output ~= "/****** Procedures *******/\n";
 				output ~= "/*************************/\n";
+				genCode(p.block.procedures);
 			}
 			
-			
-			output ~= "/*************************/\n";
-			output ~= "/***** main function *****/\n";
-			output ~= "/*************************/\n";
-			output ~= "void main() ";
-			
-			genCode(p.block);
+			if (!omitMain) {
+				output ~= "/*************************/\n";
+				output ~= "/***** main function *****/\n";
+				output ~= "/*************************/\n";
+				if (targetLanguage == TargetLanguage.D) {
+					output ~= q{	void plMain() } ~ "{\n";
+					iLvl++;
+				} else {
+					output ~= "void main() ";
+				}
+				
+				genCode(p.block.statement);
+				
+				if (targetLanguage == TargetLanguage.D) {
+					output ~= "}".indentBy(--iLvl); 
+				}
+			}
 		}
 		
-		void genCode(VarDecl[] vars) {
+		void genCode(const VarDecl[] vars) {
 			foreach(v;vars) {
-				output ~= "int ".indentBy(iLvl) ~ v.name.identifier;
+				output ~= "int ".indentBy(iLvl) ~ (targetLanguage == TargetLanguage.D ?	 "_GLOBAL_" : "") ~  v.name.identifier;
 				if (v._init) {
 					output ~= " = ";
 					genCode(v._init);
@@ -69,9 +87,9 @@ string genCode(Programm p) {
 			}
 		}
 		
-		void genCode(ConstDecl[] consts) {
+		void genCode(const ConstDecl[] consts) {
 			foreach(c;consts) {
-				output ~= "const int ".indentBy(iLvl) ~ c.name.identifier;
+				output ~= "const int ".indentBy(iLvl) ~ (targetLanguage == TargetLanguage.D ?	 "_GLOBAL_" : "") ~ c.name.identifier;
 				if (c._init) {
 					output ~= " = ";
 					genCode(c._init);
@@ -80,7 +98,7 @@ string genCode(Programm p) {
 			}
 		}
 		
-		void genCode (ProDecl[] procedures) {
+		void genCode(const ProDecl[] procedures) {
 			foreach(p;procedures) {
 				output ~= "void ".indentBy(iLvl) ~ p.name.identifier ~ "(";
 				if (p.arguments) {
@@ -96,7 +114,7 @@ string genCode(Programm p) {
 			}
 		}
 		
-		void genCode(Block b) {
+		void genCode(const Block b) {
 			
 			output ~= "{\n".indentBy(iLvl++);
 			genCode(b.variables);
@@ -108,7 +126,7 @@ string genCode(Programm p) {
 			iLvl--;
 		}
 		
-		void genCode(Statement _p) {
+		void genCode(const Statement _p) {
 			if(auto _g = cast(AssignmentStatement) _p) {
 				genCode(_g);
 			} else if(auto _g = cast(BeginEndStatement) _p) {
@@ -124,7 +142,7 @@ string genCode(Programm p) {
 			}
 		}
 		
-		void genCode(BeginEndStatement bes) {
+		void genCode(const BeginEndStatement bes) {
 			output ~= "{\n".indentBy(iLvl++);
 			foreach(ref stmt;bes.statements) {
 				genCode(stmt);
@@ -132,13 +150,13 @@ string genCode(Programm p) {
 			output ~= "}\n".indentBy(--iLvl);
 		}
 		
-		void genCode(AssignmentStatement as) {
-			output ~= as.name.identifier.indentBy(iLvl) ~ " = ";
+		void genCode(const AssignmentStatement as) {
+			output ~= (targetLanguage == TargetLanguage.D ? "_GLOBAL_": "").indentBy(iLvl) ~ as.name.identifier ~ " = ";
 			genCode(as.expr);		
 			output ~= ";\n";
 		}
 		
-		void genCode(IfStatement ifs) {
+		void genCode(const IfStatement ifs) {
 			output ~= "if (".indentBy(iLvl);
 			genCode(ifs.cond);
 			output ~= ")\n";
@@ -146,14 +164,14 @@ string genCode(Programm p) {
 		}
 		
 		
-		void genCode(WhileStatement ws) {
+		void genCode(const WhileStatement ws) {
 			output ~= "while (".indentBy(iLvl);
 			genCode(ws.cond);
 			output ~= ")\n";
 			genCode(ws.stmt);
 		}
 		
-		void genCode(CallStatement cs) {
+		void genCode(const CallStatement cs) {
 			output ~= cs.name.identifier.indentBy(iLvl) ~ "(";
 			if (cs.arguments) {
 				foreach(arg;cs.arguments[0 .. $]) {
@@ -165,13 +183,13 @@ string genCode(Programm p) {
 			output ~= ");\n";
 		}
 		
-		void genCode(OutputStatement os) {
+		void genCode(const OutputStatement os) {
 			output ~= `printf("%d\n",`.indentBy(iLvl);
 			genCode(os.expr);		
 			output ~= ");\n";
 		}
 		
-		void genCode(Condition _p) {
+		void genCode(const Condition _p) {
 			if(auto _g = cast(OddCondition) _p) {
 				genCode(_g);
 			} else if(auto _g = cast(RelCondition) _p) {
@@ -179,7 +197,7 @@ string genCode(Programm p) {
 			} 
 		}
 		
-		void genCode (Expression _p) {
+		void genCode(const Expression _p) {
 			if(auto _g = cast(AddExprssion) _p) {
 				genCode(_g);
 			} else if(auto _g = cast(MulExpression) _p) {
@@ -191,7 +209,7 @@ string genCode(Programm p) {
 			} 
 		}
 		
-		void genCode(RelOp _p) {
+		void genCode(const RelOp _p) {
 			if(auto _g = cast(Equals) _p) {
 				genCode(_g);
 			} else if(auto _g = cast(Greater) _p) {
@@ -204,10 +222,10 @@ string genCode(Programm p) {
 				genCode(_g);
 			} else if(auto _g = cast(Hash) _p) {
 				genCode(_g);
-			} 
+			}
 		}
 		
-		void genCode(AddOp _p) {
+		void genCode(const AddOp _p) {
 			if(auto _g = cast(Add) _p) {
 				genCode(_g);
 			} else if(auto _g = cast(Sub) _p) {
@@ -215,7 +233,7 @@ string genCode(Programm p) {
 			} 
 		}
 		
-		void genCode(MulOp _p) {
+		void genCode(const MulOp _p) {
 			if(auto _g = cast(Mul) _p) {
 				genCode(_g);
 			} else if(auto _g = cast(Div) _p) {
@@ -223,7 +241,7 @@ string genCode(Programm p) {
 			} 
 		}
 		
-		void genCode(RelCondition g) {
+		void genCode(const RelCondition g) {
 			genCode(g.lhs);
 			output ~= " ";
 			genCode(g.op);
@@ -231,63 +249,63 @@ string genCode(Programm p) {
 			genCode(g.rhs);
 		}
 
-		void genCode(OddCondition c) {
+		void genCode(const OddCondition c) {
 			genCode(c.expr);
 			output ~= "&1";
 		}
 		
 		
-		void genCode(Equals g) {
+		void genCode(const Equals g) {
 			output ~= "==";
 		}
 		
 		
-		void genCode(Greater g) {
+		void genCode(const Greater g) {
 			output ~= ">";
 		}
 		
 		
-		void genCode(Less g) {
+		void genCode(const Less g) {
 			output ~= "<";
 		}
 		
 		
-		void genCode(GreaterEq g) {
+		void genCode(const GreaterEq g) {
 			output ~= ">=";
 		}
 		
 		
-		void genCode(LessEq g) {
+		void genCode(const LessEq g) {
 			output ~= "<=";
 		}
 		
 		
-		void genCode(Hash g) {
+		void genCode(const Hash g) {
 			output ~= "!=";
 		}
 		
 		
-		void genCode(Add g) {
+		void genCode(const Add g) {
 			output ~= "+";
 		}
 		
 		
-		void genCode(Sub g) {
+		void genCode(const Sub g) {
 			output ~= "-";
 		}
 		
 		
-		void genCode(Mul g) {
+		void genCode(const Mul g) {
 			output ~= "*";
 		}
 		
 		
-		void genCode(Div g) {
+		void genCode(const Div g) {
 			output ~= "/";
 		}
 		
 		
-		void genCode(AddExprssion g) {
+		void genCode(const AddExprssion g) {
 			genCode(g.lhs);
 			output ~= " ";
 			genCode(g.op);
@@ -296,7 +314,7 @@ string genCode(Programm p) {
 		}
 		
 		
-		void genCode(MulExpression g) {
+		void genCode(const MulExpression g) {
 			genCode(g.lhs);
 			output ~= " ";
 			genCode(g.op);
@@ -305,21 +323,21 @@ string genCode(Programm p) {
 		}
 		
 		
-		void genCode(ParenExpression g) {
+		void genCode(const ParenExpression g) {
 			output ~= "(";
 			genCode(g.expr);
 			output ~= ")";
 		}
 		
 		
-		void genCode(PrimaryExpression g) {
+		void genCode(const PrimaryExpression g) {
 			if (g.isNegative) {
 				output ~= "-";
 			}
 			if (g.literal) {
 				output ~= g.literal.intp.number;
 			} else if (g.identifier) {
-				output ~= g.identifier.identifier;
+				output ~= (targetLanguage == TargetLanguage.D ? "_GLOBAL_" : "") ~ g.identifier.identifier;
 			} else if (g.paren) {
 				genCode(g.paren);
 			}

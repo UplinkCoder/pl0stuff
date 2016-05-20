@@ -22,11 +22,35 @@ static const extended_test_0 = test0_extended.lex.parse;
 static const extended_test_1 = test1_extended.lex.parse;
 static const extended_test_2 = test2_extended.lex.parse;
 
-pragma(msg, static_parsed);
+//pragma(msg, static_parsed.genCode);
 
-pragma(msg, extended_test_1);
+//pragma(msg, extended_test_1);
+pragma(msg, test1_extended);
+//pragma(msg, extended_test_1.optimize.genCode(false, TargetLanguage.D));
 
+mixin(q{
+CONST one = 1;
+VAR x, squ;
+PROCEDURE superflous;
+ squ := squ
+;
 
+PROCEDURE square;
+BEGIN
+   squ:= x * x
+END;
+
+BEGIN
+   WHILE x <= 10 DO
+   BEGIN
+	  CALL superflous; 
+      CALL square;
+      IF ODD x THEN ! squ;
+      x := x + one
+   END
+END.
+}.lex.parse.optimize.genCode(TargetLanguage.D)
+);
 
 
 void main(string[] args) {
@@ -53,7 +77,7 @@ void main(string[] args) {
 		"format", &format,
 		//Arguments second
 		"o|output-file", &outputFile,
-		);
+	);
 
 	if (args.length == 2) {
 		auto source = readText(args[1]);
@@ -95,7 +119,7 @@ void main(string[] args) {
 			if (_debug) writeln("After ConstRewrite", analyzer.programm.print);
 
 			reduceBeginEnd(&analyzer);
-			if (_debug) writeln("After BeginEndReduce", analyzer.programm.print);
+			if (_debug) writeln("After BeginEndReduce (1)", analyzer.programm.print);
 
 			removeUnreferancedSymbols(&analyzer);
 			if (_debug) writeln("After Removeing unreferenced Symbols (1)", analyzer.programm.print);
@@ -107,7 +131,7 @@ void main(string[] args) {
 			if (_debug) writeln("After Removeing unreferenced Symbols (2)", analyzer.programm.print);
 
 			reduceBeginEnd(&analyzer);
-			if (_debug) writeln("After BeginEndReduce", analyzer.programm.print);
+			if (_debug) writeln("After BeginEndReduce (2)", analyzer.programm.print);
 		}
 
 
@@ -158,8 +182,38 @@ void main(string[] args) {
 			cf.writeln(analyzer.programm.genCode());
 		}
 	} else {
-		writeln ("invoke like : ", args[0], " file.pl0 \n");
+//		writeln ("invoke like : ", args[0], " file.pl0 \n");
 	}
-	
+//	plMain();
+
+	q{
+		CONST one = 1;
+		
+		VAR x, squ;
+		
+		PROCEDURE superflous;
+			squ := squ
+		;
+		
+		PROCEDURE square;
+		BEGIN
+			squ := x * x;
+			CALL superflous
+		END;
+		
+		BEGIN
+			WHILE x <= 10 DO 
+			BEGIN
+				IF ODD x THEN 
+				BEGIN
+					CALL square;
+					! squ
+				END;
+				x := x + one
+			END
+		END.
+	}.lex.parse.optimize.print;//genCode(TargetLanguage.C).writeln;
+
+
 	
 }

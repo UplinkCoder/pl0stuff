@@ -11,15 +11,13 @@ import std.algorithm;
 import std.range;
 import std.array;
 import ast_modifier;
-
+pure :
 /** run this at the last possible moment */
 void eliminateVariableAssignments(Analyzer* a) {
-	static OptimizerState state;
+	OptimizerState state;
 	
-	//	if (a.stateSyncId != state.stateSyncId) {
-	state = state.init;
 	foreach (as_node;a.allNodes.filter!(n => cast(AssignmentStatement)n.node)) {
-		auto as = cast(AssignmentStatement*)&as_node.node;
+		auto as = cast(AssignmentStatement)as_node.node;
 		if (auto pe = cast(PrimaryExpression) (as.expr)) {
 			//Assignments to itself get eliminated directly!
 			if (pe.identifier && pe.identifier.identifier == as.name.identifier) {
@@ -35,12 +33,12 @@ void eliminateVariableAssignments(Analyzer* a) {
 	//	}
 
 	foreach (pe_node;a.allNodes.filter!(n => cast(PrimaryExpression)n.node 
-			&& (cast(PrimaryExpression*)&n.node).identifier)) {
-		auto pe = cast(PrimaryExpression*)&pe_node.node;
+			&& (cast(PrimaryExpression)n.node).identifier)) {
+		auto pe = cast(PrimaryExpression)pe_node.node;
 		auto varSymbol = a.getNearestSymbol(a.getParentBlock(pe_node), pe.identifier);
 		assert(varSymbol);
 		if (varSymbol.type == Analyzer.Symbol.SymbolType._VarDecl) {
-			if (auto _pe = cast(PrimaryExpression)(cast(AssignmentStatement*)&(state.AssignmentStatementsByVarSymbol[*varSymbol][0].node)).expr) {
+			if (auto _pe = cast(PrimaryExpression)(cast(AssignmentStatement)(state.AssignmentStatementsByVarSymbol[*varSymbol][0].node)).expr) {
 				if (!varSymbol.v._init && _pe.literal !is null) {
 					removeStmt(a, state.AssignmentStatementsByVarSymbol[*varSymbol][0]);
 					varSymbol.v._init = _pe;
@@ -49,7 +47,7 @@ void eliminateVariableAssignments(Analyzer* a) {
 			}
 			auto as_node = a.getNearest!(AssignmentStatement)(Analyzer.getParentWithParent!(Statement)(pe_node), state.AssignmentStatementsByVarSymbol[*varSymbol]);
 			if (as_node !is null) {
-				auto as = cast(AssignmentStatement*)&as_node.node;
+				auto as = cast(AssignmentStatement)as_node.node;
 				if (auto pas = Analyzer.getParent!(AssignmentStatement)(pe_node)) {
 					continue;
 				}
@@ -66,14 +64,14 @@ void eliminateVariableAssignments(Analyzer* a) {
 
 void reduceBeginEnd(Analyzer* a) {
 	foreach (be_node;a.allNodes.filter!(n => cast(BeginEndStatement)n.node
-			&& (((cast(BeginEndStatement*)&(n.node)).statements.length == 1)
+			&& (((cast(BeginEndStatement)(n.node)).statements.length == 1)
 				|| cast(BeginEndStatement)n.parent.node))) {
-		auto be = cast(BeginEndStatement*)&be_node.node;
+		auto be = cast(BeginEndStatement)be_node.node;
 		if (be.statements.length == 1) {
 			replaceStmt(a, be_node, be.statements[0]);
 		} else {
 			// we can merge with parent
-			auto pbe = cast(BeginEndStatement*)&(be_node.parent.node);
+			auto pbe = cast(BeginEndStatement)(be_node.parent.node);
 			replaceStmts(a, be_node, be.statements);
 		}
 	}
@@ -98,9 +96,9 @@ void inlineCall(Analyzer* a) {
 void rewriteConst(Analyzer *a) {
 	foreach(pe_node;a.allNodes
 		.filter!(n => cast(PrimaryExpression)n.node !is null)
-		.filter!(n => (cast(PrimaryExpression*)&n.node).identifier !is null))
+		.filter!(n => (cast(PrimaryExpression)n.node).identifier !is null))
 	{
-		auto s = a.getNearestSymbol(a.getParentBlock(pe_node), (cast(PrimaryExpression*)&pe_node.node).identifier);
+		auto s = a.getNearestSymbol(a.getParentBlock(pe_node), (cast(PrimaryExpression)pe_node.node).identifier);
 		if (s !is null && s.type == Analyzer.Symbol.SymbolType._ConstDecl) {
 			replaceExpr(a, pe_node, s.c._init);
 		}
@@ -115,10 +113,10 @@ void removeUnreferancedSymbols(Analyzer *a) {
 	
 	if (UsedSymbolIds.length != a.stable.symbolById.length) {
 		foreach(id; 0 .. cast (uint) a.stable.symbolById.length) {
-			if (!UsedSymbolIds.length || id != UsedSymbolIds[0]) {
+			if ((!UsedSymbolIds.length || id != UsedSymbolIds[0]) && id in a.stable.symbolById) {
 				a.removeSymbol(a.stable.symbolById[id]);
 			} else {
-				UsedSymbolIds = UsedSymbolIds [1 .. $];
+				if (UsedSymbolIds.length) UsedSymbolIds = UsedSymbolIds [1 .. $];
 			}
 		}
 		a.allNodesFilled = false;
@@ -133,9 +131,9 @@ uint[] getAllUsedSymbolIds(Analyzer* a) {
 	//first loop over all PrimaryExpressions
 	foreach(pe_node;a.allNodes
 		.filter!(n => cast(PrimaryExpression)n.node !is null)
-		.filter!(n => (cast(PrimaryExpression*)&n.node).identifier !is null))
+		.filter!(n => (cast(PrimaryExpression)n.node).identifier !is null))
 	{
-		auto s = a.getNearestSymbol(Analyzer.getParentBlock(pe_node), (cast(PrimaryExpression*)&pe_node.node).identifier);
+		auto s = a.getNearestSymbol(Analyzer.getParentBlock(pe_node), (cast(PrimaryExpression)pe_node.node).identifier);
 		if (s !is null) {
 			usedIds ~= s.id; 
 		}
@@ -151,4 +149,18 @@ uint[] getAllUsedSymbolIds(Analyzer* a) {
 	}
 	
 	return sort(usedIds).uniq.array;
+}
+
+
+Programm optimize(const Programm src) pure {
+	auto analyzer = Analyzer(src); 
+	rewriteConst(&analyzer);
+	inlineCall(&analyzer);
+	reduceBeginEnd(&analyzer);
+	removeUnreferancedSymbols(&analyzer);
+	eliminateVariableAssignments(&analyzer);
+	removeUnreferancedSymbols(&analyzer);
+	reduceBeginEnd(&analyzer);
+	
+	return analyzer.programm;
 }

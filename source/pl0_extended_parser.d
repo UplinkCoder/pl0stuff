@@ -1,3 +1,4 @@
+
 import pl0_extended_ast;
 import pl0_extended_token;
 
@@ -31,7 +32,7 @@ string footer(alias T)() if (is(T : PLNode) || is(typeof(T):PLNode)) {
 	immutable string footer = `
 		version (Location) {
 			auto lastToken = peekToken(-1);
-			loc.length = lastToken.pos - firstToken.pos + lastToken.length;
+			loc.length = lastToken.pos -  firstToken.pos + lastToken.length;
 			` ~ r ~ `
 		} else {
 			return ` ~ m ~ `;
@@ -136,6 +137,7 @@ Programm parse(in Token[] tokens) pure {
 			|| isOutputStatement();
 		}
 
+
 		bool isIfStatement() {
 			return peekMatch([TokenType.TT_24]);
 		}
@@ -143,6 +145,7 @@ Programm parse(in Token[] tokens) pure {
 		bool isWhileStatement() {
 			return peekMatch([TokenType.TT_29]);
 		}
+
 
 		bool isAssignmentStatement() {
 			return peekMatch([TokenType.TT_Identifier, TokenType.TT_11]);
@@ -299,6 +302,7 @@ Programm parse(in Token[] tokens) pure {
 
 		Programm parseProgramm() {
 			Block block;
+			 
 			mixin(header);
 
 			block = parseBlock();
@@ -339,6 +343,7 @@ Programm parse(in Token[] tokens) pure {
 			}
 			statement = parseStatement();
 
+
 			mixin(footer!Block);
 		}
 
@@ -369,6 +374,7 @@ Programm parse(in Token[] tokens) pure {
 
 		ProDecl parseProDecl() {
 			Identifier name;
+			bool isFunction;
 			Block block;
 			VarDecl[] arguments;
 			mixin(header);
@@ -376,11 +382,14 @@ Programm parse(in Token[] tokens) pure {
 			name = parseIdentifier();
 			match(TokenType.TT_12);
 			if (opt_match(TokenType.TT_18)) {
-				arguments ~= parseVarDecl();
-				while(opt_match(TokenType.TT_7)) {
-						arguments ~= parseVarDecl();
+				isFunction = true;
+				if(!opt_match(TokenType.TT_12)) {
+					arguments ~= parseVarDecl();
+					while(opt_match(TokenType.TT_7)) {
+							arguments ~= parseVarDecl();
+					}
+					match(TokenType.TT_12);
 				}
-				match(TokenType.TT_12);
 			}
 			block = parseBlock();
 			match(TokenType.TT_12);

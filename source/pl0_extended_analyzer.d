@@ -1,7 +1,7 @@
 import pl0_extended_ast;
 
 struct Analyzer {
-
+//pure :
 	struct NodeWithParentBlock {
 		PLNode node;
 		NodeWithParentBlock *parent;
@@ -24,7 +24,8 @@ struct Analyzer {
 
 
 	alias nwp = NodeWithParentBlock; 
-	import std.algorithm;
+	import std.algorithm : map, filter;
+	import optimizer : findSplit;
 	bool symbolTableFilled = false;
 	bool allNodesFilled = false;
 
@@ -32,12 +33,12 @@ struct Analyzer {
 	Programm programm;
 	NodeWithParentBlock*[] allNodes;
 	Block[Block] parentMap;
+
 	shared _Error[] errors;
 
-
-
 	struct SymbolTable {
-		static running_id = 0;
+//	pure :
+		int running_id = 0;
 		static struct Symbol {
 			uint id;
 			Block definedIn;
@@ -56,25 +57,25 @@ struct Analyzer {
 			
 			SymbolType type;
 			
-			this(VarDecl v, Block definedIn) {
+			this(VarDecl v, ref Block definedIn) pure {
 				this.v = v;
 				this.definedIn = definedIn;
 				this.type = SymbolType._VarDecl;
 			}
 			
-			this(ConstDecl c, Block definedIn) {
+			this(ConstDecl c, ref Block definedIn) pure {
 				this.c = c;
 				this.definedIn = definedIn;
 				this.type = SymbolType._ConstDecl;
 			}
 			
-			this(ProDecl p, Block definedIn) {
+			this(ProDecl p, ref Block definedIn) pure {
 				this.p = p;
 				this.definedIn = definedIn;
 				this.type = SymbolType._ProDecl;
 			}
 			
-			const (char)[] getSymbolName() {
+			const (char)[] getSymbolName() pure {
 				final switch(type) with (Symbol.SymbolType) {
 					case _VarDecl :
 						return cast(const (char)[]) v.name.identifier;
@@ -87,7 +88,7 @@ struct Analyzer {
 			}
 		}
 
-		void addSymbol(Symbol s) {
+		void addSymbol(Symbol s) pure {
 			s.id = running_id++;
 			
 			symbolsByName[s.getSymbolName()] ~= s;
@@ -109,9 +110,8 @@ struct Analyzer {
 	SymbolTable stable; 
 	alias Symbol = SymbolTable.Symbol;
 
-	void fillSymbolTable() {
+	void fillSymbolTable() pure {
 		stable = typeof(stable).init;
-		stable.running_id = 0;
 		foreach(b;getAllNodes()
 			.map!(n => cast(Block)n.node)
 			.filter!(b => b !is null && (!!b.variables.length || !!b.constants.length || !!b.procedures.length))) {
@@ -131,7 +131,7 @@ struct Analyzer {
 		}
 	}
 
-	void fillParentMap() {
+	void fillParentMap() pure {
 		void fillParentMap(Block child, Block parent) {
 			parentMap[child] = parent;
 			foreach(p; child.procedures) {
@@ -142,34 +142,75 @@ struct Analyzer {
 		fillParentMap(programm.block, null);
 	}
 	
-	this(Programm programm, bool skip_analysis = false) {
-		this.programm = programm;
-		if (!skip_analysis) {
-			fillSymbolTable();
-			fillParentMap();
-			allNodes = getAllNodes();
-			symbolTableFilled = true;
-			allNodesFilled = true;
-		}
+	this(const Programm programm) pure {
+		this.programm = cast(Programm) programm;
+
+		fillSymbolTable();
+		fillParentMap();
+		allNodes = getAllNodes();
+		symbolTableFilled = true;
+		allNodesFilled = true;
 	}
 
-	void removeSymbol(Symbol s) {
-		Block b = s.definedIn;
-		import std.array;
-			final switch(s.type) with (Symbol.SymbolType) {
-				case _VarDecl :
-				auto findSplitResult = findSplit(b.variables, [s.v]);
-				b.variables = findSplitResult[0] ~ findSplitResult[2];
-				break;
-				case _ConstDecl :
-				auto findSplitResult = findSplit(b.constants, [s.c]);
-				b.constants = findSplitResult[0] ~ findSplitResult[2];
-				break;
-				case _ProDecl :
-					auto findSplitResult = findSplit(b.procedures, [s.p]);
-				b.procedures = findSplitResult[0] ~ findSplitResult[2];
-				break;
+	void removeSymbol(Symbol s) pure {
+		static T[] rms(T) (T[] syms, T s) {
+			uint i;
+			if (syms is null) {
+				return null;
+			}
+			while(i <= syms.length) {
+				if (s is syms[i++]) {
+					return syms[0 .. i-1] ~ syms[i .. $];
+				}
+			}
+			assert(0, "Symbol could not be found");
 		}
+
+		auto p = parentMap[s.definedIn];
+		Block* BlockPtr;
+		foreach(block;p.blocks) {
+			if (*block is s.definedIn) {
+				BlockPtr = block;
+				break;
+			}
+		}
+		//auto oldBlock = s.definedIn;
+	//	Block b = getParentBlock(s.d);
+		final switch(s.type) with (Symbol.SymbolType) {
+			case _VarDecl :
+			BlockPtr ? *BlockPtr : programm.block = new Block(
+					s.definedIn.constants,
+					rms(s.definedIn.variables, s.v),
+					s.definedIn.procedures,
+					s.definedIn.statement
+				);
+			break;
+			case _ConstDecl :
+			BlockPtr ? *BlockPtr : programm.block = new Block(
+				rms(s.definedIn.constants, s.c),
+				s.definedIn.variables,
+				s.definedIn.procedures,
+				s.definedIn.statement
+			);
+
+			break;
+			case _ProDecl :
+			BlockPtr ? *BlockPtr : programm.block = new Block(
+				s.definedIn.constants,
+				s.definedIn.variables,
+				rms(s.definedIn.procedures, s.p),
+				s.definedIn.statement
+			);
+			break;
+		}
+		import std.array;
+	//	this.stable.symbolsByBlock[s.definedIn].replace([s],[]);
+		s.definedIn = BlockPtr ? *BlockPtr : programm.block;
+	//	this.stable.symbolsByName.remove(s.getSymbolName());
+
+		fillSymbolTable();
+		fillParentMap();
+
 	}
 
 	alias getParentBlock = getParent!(Block);
@@ -185,10 +226,10 @@ struct Analyzer {
 
 	static T getParent(T)(nwp* n) {
 		auto p = getParentWithParent!(T)(n);
-		return cast (T) p.node;
+		return cast(T) p.node;
 	}
 
-	nwp* getNearest(T)(nwp* node, nwp*[] canidates) if(is(T:PLNode)) {
+	nwp* getNearest(T, bool controlflowsensitive = true)(nwp* node, nwp*[] canidates) if(is(T:PLNode)) {
 		nwp* currentClosestCanidate = null;
 		if (auto bes = cast(BeginEndStatement) node.parent.node) {
 			foreach(stmt;bes.statements) {
@@ -205,6 +246,8 @@ struct Analyzer {
 				currentClosestCanidate = c;
 			}
 		} else if (auto p = cast(Programm) node.parent.node) {
+			return null;
+		} else if (controlflowsensitive && (!!cast(IfStatement) node.parent.node && !!cast(WhileStatement) node.parent.node)) {
 			return null;
 		} else if (auto nd = cast(PLNode) node.parent.node) {
 			foreach(c;canidates.filter!(n => n.parent.node is nd && !!cast(T)n.node)) {
@@ -223,10 +266,10 @@ struct Analyzer {
 		}
 	}
 
-	Symbol* getNearestSymbol(Block b, Identifier i) {
+	Symbol* getNearestSymbol(Block b, Identifier i) pure {
 		auto syms = stable.symbolsByBlock.get(b, null);
 		if (syms !is null) {
-			import std.algorithm;
+			import std.algorithm : find;
 			auto s = find!(s => s.getSymbolName == i.identifier)(syms);
 			if (s.length >= 1) {
 				s[0].isReferenced = true;
@@ -284,17 +327,12 @@ struct Analyzer {
 	}
 	
 	nwp*[] getAllNodes() pure {
-		static if  (true) { 
-		if (allNodesFilled) {
-			return allNodes;
-		} else {
+		if (!allNodesFilled) {
 			allNodes = getAllNodes(programm.block, new nwp(programm, null));
 		}
 		return allNodes;
-		} else {
-			return  getAllNodes(programm.block, new nwp(programm, null));
-		}
 	}
+	
 	static pure {
 
 		nwp*[] getAllNodes(Block b, nwp* p) {
@@ -378,9 +416,7 @@ struct Analyzer {
 				auto pp = new nwp(pe, p);
 				return pp ~ getAllNodes(pe.expr, pp);
 			} else if(auto pr = cast(PrimaryExpression) e) {
-				if (pr.identifier) {
-					return [new nwp(pr,p)];
-				} else if (pr.literal) {
+				if (pr.identifier !is null || pr.literal !is null) {
 					return [new nwp(pr,p)];
 				} else if (pr.paren) {
 					auto pp = new nwp(pr,p);
@@ -390,4 +426,15 @@ struct Analyzer {
 		}
 	}
 	
+}
+
+
+
+Block*[] blocks(ref Block b) pure {
+	Block*[] _blocks;
+	if (b && b.procedures) foreach(ref p;b.procedures) {
+		_blocks ~= &p.block ~ p.block.blocks;
+	}
+
+	return _blocks;
 }
