@@ -1,4 +1,4 @@
-﻿import std.algorithm;
+import std.algorithm;
 import std.array;
 import std.range;
 import pl0_extended_ast;
@@ -342,11 +342,6 @@ string genCode(const Programm p, const TargetLanguage targetLanguage = TargetLan
 				genCode(g.paren);
 			}
 		}
-		
-		
-		
-		
-		
 	}
 	auto cg = CodeGen();
 	cg.genCode(p);

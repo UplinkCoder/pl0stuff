@@ -14,6 +14,8 @@ import optimizer;
 import codeGen;
 import sdc.terminal;
 
+import ddmd.ctfe.bc;
+
 static const static_parsed = test0.lex.parse;
 static const static_patsed_1 = test1.lex.parse;
 
@@ -26,9 +28,9 @@ static const extended_test_2 = test2_extended.lex.parse;
 
 //pragma(msg, extended_test_1);
 pragma(msg, test1_extended);
-//pragma(msg, extended_test_1.optimize.genCode(false, TargetLanguage.D));
+pragma(msg, test1_extended.lex.parse.optimize.genCode( TargetLanguage.D));
 
-mixin(q{
+pragma(msg, q{
 CONST one = 1;
 VAR x, squ;
 PROCEDURE superflous;
@@ -62,6 +64,7 @@ void main(string[] args) {
 	bool optimize;
 	bool _debug;
 	bool compile;
+    bool interactive;
 	bool format;
 	string compiler = "clang";
 	string outputFile;
@@ -73,6 +76,7 @@ void main(string[] args) {
 		"O|optimize", &optimize,
 		"debug", &_debug,
 		"C|compile", &compile,
+        "i|interactive", &interactive,
 		"compiler", &compiler,
 		"format", &format,
 		//Arguments second
@@ -84,7 +88,7 @@ void main(string[] args) {
 		auto lexed = lex(source);
 		auto parsed = parse(lexed);
 
-		auto analyzer = Analyzer(parsed);
+		auto analyzer = Analyzer(parsed);		
 		if (_debug) writeln(print(parsed));
 
 		foreach(k,v;analyzer.stable.symbolsByName) {
@@ -182,7 +186,7 @@ void main(string[] args) {
 			cf.writeln(analyzer.programm.genCode());
 		}
 	} else {
-//		writeln ("invoke like : ", args[0], " file.pl0 \n");
+		writeln ("invoke like : ", args[0], " file.pl0 \n");
 	}
 //	plMain();
 

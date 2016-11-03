@@ -1,4 +1,4 @@
-﻿import pl0_extended_analyzer;
+import pl0_extended_analyzer;
 import pl0_extended_ast;
 import pl0_extended_printer;
 
@@ -36,7 +36,7 @@ void eliminateVariableAssignments(Analyzer* a) {
 			&& (cast(PrimaryExpression)n.node).identifier)) {
 		auto pe = cast(PrimaryExpression)pe_node.node;
 		auto varSymbol = a.getNearestSymbol(a.getParentBlock(pe_node), pe.identifier);
-		assert(varSymbol);
+		if(!varSymbol) continue;
 		if (varSymbol.type == Analyzer.Symbol.SymbolType._VarDecl) {
 			if (auto _pe = cast(PrimaryExpression)(cast(AssignmentStatement)(state.AssignmentStatementsByVarSymbol[*varSymbol][0].node)).expr) {
 				if (!varSymbol.v._init && _pe.literal !is null) {
