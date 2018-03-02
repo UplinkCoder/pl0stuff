@@ -14,7 +14,7 @@ import optimizer;
 import codeGen;
 import sdc.terminal;
 
-import ddmd.ctfe.bc;
+// import ddmd.ctfe.bc;
 
 static const static_parsed = test0.lex.parse;
 static const static_patsed_1 = test1.lex.parse;

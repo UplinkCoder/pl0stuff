@@ -416,7 +416,7 @@ Programm parse(in Token[] tokens) pure {
 				import std.conv;
 				debug {
 					import std.stdio;
-					__ctfeWriteln(isStatement());
+				//	__ctfeWriteln(isStatement());
 				}
 				assert(s !is null, to!(string)(peekToken(0)));
 			}
