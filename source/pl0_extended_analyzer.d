@@ -24,8 +24,7 @@ struct Analyzer {
 
 
 	alias nwp = NodeWithParentBlock; 
-	import std.algorithm : map, filter;
-	import optimizer : findSplit;
+	import std.algorithm : map, filter, findSplit;
 	bool symbolTableFilled = false;
 	bool allNodesFilled = false;
 

@@ -34,7 +34,7 @@ long getConst(PrimaryExpression pe)
 		result *= pe.isNegative ? -1 : 1;
 	} else {
 	Linvalid :
-		return invalidConst;
+		result = invalidConst;
 	}
 }
 
